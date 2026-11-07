@@ -140,8 +140,10 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
 .tb:active b,.tb.on b{color:var(--ink)}
 .tb.off{opacity:.45}
 #trickBtn{position:fixed;pointer-events:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 162px);right:max(16px,env(safe-area-inset-right,0px));font-size:12px;color:var(--ink);background:var(--sun);border:0;border-radius:999px;padding:6px 12px;font-weight:600}
-#tricks{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,calc(100% - 32px));max-height:calc(100% - 80px);box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:16px 16px 12px;background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:18px;z-index:5}
+#tricks{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(390px,calc(100% - 32px));max-width:none;max-height:calc(100% - 40px);z-index:5}
 #tricks[hidden]{display:none}
+.resume{font-family:var(--display);font-size:18px;color:var(--ink);background:var(--sun);border:0;border-radius:14px;padding:10px 14px;box-shadow:0 4px 0 var(--coral);white-space:nowrap}
+.resume:active{transform:translateY(3px);box-shadow:0 1px 0 var(--coral)}
 .tk-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex:none}
 #trickClose{font-family:var(--display);font-size:15px;color:var(--ink);background:var(--sun);border:0;border-radius:10px;padding:7px 12px;box-shadow:0 3px 0 var(--coral)}
 .tk-body{overflow-y:auto;min-height:0;max-height:calc(100vh - 170px);max-height:calc(100dvh - 170px);display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
@@ -182,29 +184,8 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
   <button type="button" class="tb" data-t="air"><b>↑</b><span id="tbA">에어</span></button>
   <button type="button" class="tb" data-t="hang"><b>●</b><span>행텐(꾹)</span></button>
 </div>
-<button id="trickBtn" type="button" hidden aria-expanded="false" aria-controls="tricks">기술 목록</button>
-<div id="tricks" hidden role="dialog" aria-label="서핑 기술 목록">
-  <div class="tk-head"><span class="kicker">일시정지 · 기술 목록</span><button id="trickClose" type="button">닫고 계속</button></div>
-  <div class="tk-body">
-    <dl class="steps">
-      <dt>↕ 드래그</dt><dd>페이스 오르내리기 · 내려가면 가속, 올라가면 감속</dd>
-      <dt>바텀턴 · 탑턴</dt><dd>바닥까지 내려갔다 올라가기, 립 근처까지 올라갔다 내려오기</dd>
-      <dt>위로 튕기기</dt><dd>페이스 위쪽에서: 컬 근처면 스냅, 숄더에서 빠르면 에어 · 아래쪽에선 바텀턴 · Space</dd>
-      <dt>왼쪽 튕기기</dt><dd>컷백 · 컬 쪽으로 되돌아 턴 · ← 키</dd>
-      <dt>오른쪽 튕기기</dt><dd>카빙, 페이스 위쪽이면 스냅 · → 키</dd>
-      <dt>립 존</dt><dd>상단 '립 존'에 불이 들어올 때 튕기면 퍼펙트 ×1.5</dd>
-      <dt>공중에서 원</dt><dd>원 하나에 반 바퀴씩 추가 회전(540·720) · 탭하면 그랩</dd>
-      <dt>꾹 누르기</dt><dd>움직이지 않고 누르고 있으면 행텐 · H 키</dd>
-      <dt>콤보</dt><dd>기술을 3초 안에 이어가면 점수 배수가 올라가요</dd>
-      <dt>배럴</dt><dd>속도를 늦춰 컬 안에 머물기 · 너무 깊으면 와이프아웃</dd>
-    </dl>
-    <span class="kicker">패들링</span>
-    <dl class="steps">
-      <dt>← → ↑ ↓ 드래그</dt><dd>피크 쪽으로 자리 잡기</dd>
-      <dt>탭 · Space</dt><dd>초록 구간에서 테이크오프</dd>
-    </dl>
-  </div>
-</div>
+<button id="trickBtn" type="button" hidden aria-expanded="false" aria-controls="tricks">메뉴</button>
+<div id="tricks" class="card" hidden role="dialog" aria-label="게임 메뉴"></div>
 <div id="toast"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
 <div id="fade"></div>
 
@@ -707,6 +688,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
   if (mode === 'play' && phase === 'ride' && !e.repeat){ if (e.code === 'ArrowLeft' || e.code === 'KeyA') trickQ = 'left'; if (e.code === 'ArrowRight' || e.code === 'KeyD') trickQ = 'right'; }
   if (e.code === 'KeyC' && mode === 'play') cycleCam();
+  if ((e.code === 'Escape' || e.code === 'KeyP') && mode === 'play'){ setPaused(!paused); e.preventDefault(); }
   if (e.code === 'Enter' && mode !== 'play') startHeat();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -796,8 +778,8 @@ const REC_KEY = 'sunset-swell-records';
 function loadRecs(){ try { const r = JSON.parse(localStorage.getItem(REC_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (_) { return []; } }
 function saveRecs(r){ try { localStorage.setItem(REC_KEY, JSON.stringify(r.slice(0, 50))); } catch (_) {} }
 const pad2 = n => String(n).padStart(2, '0');
-function renderRecords(){
-  const sum = $('recSum'), list = $('recList'); if (!sum) return;
+function renderRecords(root = $('card')){
+  const sum = root.querySelector('#recSum'), list = root.querySelector('#recList'); if (!sum) return;
   const r = loadRecs();
   const bestH = r.reduce((m, h) => Math.max(m, h.total), 0);
   const avg = r.length ? r.reduce((a, h) => a + h.total, 0) / r.length : 0;
@@ -817,23 +799,29 @@ function renderRecords(){
   }).join('') + (r.length > 6 ? `<div class="rec-note">최근 6개 · 전체 ${r.length}개 히트</div>` : '');
 }
 let clearArm = 0;
-function selectTab(name){
-  document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
-  document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
-  if (name === 'records') renderRecords();
+function selectTab(name, root = $('card')){
+  root.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  root.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
+  if (name === 'records') renderRecords(root);
+  if (root.id === 'tricks') pauseTab = name;
 }
-function wireCard(){
-  document.querySelectorAll('.go').forEach(b => b.addEventListener('click', startHeat));
-  document.querySelectorAll('.snd').forEach(b => b.addEventListener('click', () => setSound(!soundOn)));
-  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
-  document.querySelectorAll('.rec-open').forEach(b => b.addEventListener('click', () => { $('card').innerHTML = startCardHTML; wireCard(); setSound(soundOn); selectTab('records'); renderVisits(); }));
-  const c = $('recClear');
+function wireCard(root = $('card')){
+  root.querySelectorAll('.go').forEach(b => b.addEventListener('click', startHeat));
+  root.querySelectorAll('.resume').forEach(b => b.addEventListener('click', () => setPaused(false)));
+  root.querySelectorAll('.snd').forEach(b => b.addEventListener('click', () => setSound(!soundOn)));
+  root.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab, root)));
+  root.querySelectorAll('.rec-open').forEach(b => b.addEventListener('click', () => { $('card').innerHTML = startCardHTML; wireCard(); setSound(soundOn); selectTab('records'); if (typeof renderVisits === 'function') renderVisits(); }));
+  const c = root.querySelector('#recClear');
   if (c) c.addEventListener('click', () => {
-    if (Date.now() - clearArm < 3000){ saveRecs([]); try { localStorage.removeItem('sunset-swell-best2'); } catch (_) {} clearArm = 0; c.classList.remove('arm'); c.textContent = '지웠어요'; renderRecords(); setTimeout(() => { c.textContent = '기록 지우기'; }, 1500); }
+    if (Date.now() - clearArm < 3000){ saveRecs([]); try { localStorage.removeItem('sunset-swell-best2'); } catch (_) {} clearArm = 0; c.classList.remove('arm'); c.textContent = '지웠어요'; renderRecords(root); setTimeout(() => { c.textContent = '기록 지우기'; }, 1500); }
     else { clearArm = Date.now(); c.classList.add('arm'); c.textContent = '한 번 더 누르면 삭제'; setTimeout(() => { if (Date.now() - clearArm >= 2900){ c.classList.remove('arm'); c.textContent = '기록 지우기'; } }, 3000); }
   });
 }
+let pauseTab = 'moves';
 const startCardHTML = $('card').innerHTML;
+const pauseHTML = startCardHTML
+  .replace('<button class="go" type="button">패들 아웃</button>', '<button class="resume" type="button">이어서 타기</button>')
+  .replace('Surf metaverse · Heat 2:00', '일시정지 중');
 wireCard();
 
 /* ---------- cumulative visitor count (one count per browser) ---------- */
@@ -867,6 +855,12 @@ $('camBtn').addEventListener('click', cycleCam);
 let paused = false;
 function setPaused(on){
   paused = on; $('tricks').hidden = !on; $('trickBtn').setAttribute('aria-expanded', String(on));
+  $('trickBtn').textContent = on ? '닫기' : '메뉴';
+  if (on){
+    const p = $('tricks'); p.innerHTML = pauseHTML; wireCard(p); setSound(soundOn); selectTab(pauseTab, p);
+    if (typeof renderVisits === 'function') renderVisits();
+    const r = p.querySelector('.resume'); if (r) r.focus();
+  } else $('tricks').innerHTML = '';
   ptr = null; inputX = 0; inputY = 0; tapQueued = false; trickQ = null;
   if (ac){ try { on ? ac.suspend() : ac.resume(); } catch (_) {} }
 }
@@ -882,7 +876,6 @@ document.querySelectorAll('.tb').forEach(b => {
   b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
   b.addEventListener('contextmenu', e => e.preventDefault());
 });
-$('trickClose').addEventListener('click', () => setPaused(false));
 
 /* ---------- UI ---------- */
 let toastTimer = 0;
