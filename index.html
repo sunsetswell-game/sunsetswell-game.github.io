@@ -1,0 +1,1304 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="해 질 녘 큰 파도를 타이밍 맞춰 잡고 배럴을 타는 3D 서핑 게임">
+<meta property="og:title" content="선셋 스웰"><meta property="og:description" content="해 질 녘 큰 파도를 타는 3D 서핑 메타버스">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230b1430'/%3E%3Cpath d='M8 40c8-14 22-18 30-8-6-2-10 2-8 8 6 0 10-4 12-8 4 6 8 8 14 8v8H8z' fill='%235fe0c8'/%3E%3C/svg%3E">
+<style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px/1.5 system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
+</head><body>
+<title>선셋 스웰</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=IBM+Plex+Sans+KR:wght@400;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* layout: full-bleed WebGL break at golden hour; HUD pinned to safe-area corners; timing meter along the bottom; one centered card for start/results */
+:root{
+  --ink:#0b1430;
+  --dusk:#1b2a5c;
+  --coral:#ff8a65;
+  --sun:#ffd27a;
+  --aqua:#5fe0c8;
+  --foam:#eafaf6;
+  --foam-dim:rgba(234,250,246,.7);
+  --glass:rgba(11,20,48,.6);
+  --line:rgba(234,250,246,.18);
+  --display:"Bagel Fat One","IBM Plex Sans KR","Apple SD Gothic Neo",sans-serif;
+  --body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--ink);color:var(--foam);font-family:var(--body)}
+body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#stage{position:fixed;inset:0;touch-action:none}
+#stage canvas{display:block;width:100%;height:100%}
+
+.hud{position:fixed;pointer-events:none;display:flex;flex-direction:column;gap:2px;text-shadow:0 1px 8px rgba(11,20,48,.6)}
+.tl{top:calc(env(safe-area-inset-top,0px) + 14px);left:max(16px,env(safe-area-inset-left,0px))}
+.tr{top:calc(env(safe-area-inset-top,0px) + 14px);right:max(16px,env(safe-area-inset-right,0px));align-items:flex-end}
+.label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--foam-dim)}
+.mid{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.total{font-family:var(--display);font-size:30px;line-height:1;color:var(--sun);font-variant-numeric:tabular-nums}
+.total small{font-family:var(--mono);font-size:12px;color:var(--foam-dim);margin-left:4px}
+.chips{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:180px}
+.chip{font-family:var(--mono);font-size:12px;padding:2px 7px;border-radius:999px;border:1px solid var(--line);color:var(--foam-dim);font-variant-numeric:tabular-nums}
+.chip.best{color:var(--ink);background:var(--sun);border-color:var(--sun)}
+.report{font-family:var(--mono);font-size:11px;color:var(--foam-dim);letter-spacing:.04em}
+
+#ride{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 16px);transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;pointer-events:none}
+#lipz{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--foam-dim);padding:2px 9px;border-radius:999px;border:1px solid var(--line);opacity:.35;transition:opacity .15s,background .15s}
+#lipz.on{opacity:1;color:var(--ink);background:var(--sun);border-color:var(--sun)}
+#ridePts{font-family:var(--display);font-size:28px;color:var(--foam);text-shadow:0 2px 0 var(--coral),0 4px 18px rgba(11,20,48,.5);font-variant-numeric:tabular-nums}
+.pocket{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--foam-dim);letter-spacing:.1em}
+.ptrack{position:relative;width:120px;height:6px;border-radius:3px;background:rgba(234,250,246,.18);overflow:hidden}
+.ptrack i{position:absolute;top:0;bottom:0;left:20%;width:30%;background:rgba(95,224,200,.45)}
+.ptrack b{position:absolute;top:-3px;width:4px;height:12px;border-radius:2px;background:var(--foam);transform:translateX(-50%)}
+
+#meter{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);width:min(420px,calc(100% - 32px));display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.mtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#mmsg{font-size:14px;font-weight:600;color:var(--foam);text-shadow:0 1px 8px rgba(11,20,48,.7)}
+#mdist{font-family:var(--mono);font-size:12px;color:var(--foam-dim)}
+.mtrack{position:relative;height:14px;border-radius:7px;background:rgba(11,20,48,.55);border:1px solid var(--line)}
+.mzone{position:absolute;top:0;bottom:0;border-radius:6px;background:rgba(95,224,200,.35)}
+.mperf{position:absolute;top:0;bottom:0;background:rgba(95,224,200,.75)}
+.mme{position:absolute;right:6%;top:50%;width:10px;height:10px;border-radius:50%;background:var(--sun);transform:translate(50%,-50%);box-shadow:0 0 0 3px rgba(255,210,122,.3)}
+#mwave{position:absolute;top:50%;width:18px;height:18px;transform:translate(-50%,-50%);border-radius:50% 50% 50% 0;background:var(--foam);box-shadow:0 0 12px rgba(234,250,246,.8)}
+
+#toast{position:fixed;left:50%;top:32%;transform:translate(-50%,-50%) scale(.9);pointer-events:none;text-align:center;opacity:0;transition:opacity .25s,transform .25s}
+#toast.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#toast .t1{font-family:var(--display);font-size:clamp(30px,8vw,50px);color:var(--foam);text-shadow:0 3px 0 var(--coral),0 6px 24px rgba(11,20,48,.5);white-space:nowrap}
+#toast .t2{font-family:var(--mono);font-size:15px;color:var(--sun);margin-top:6px}
+#toast.bad .t1{text-shadow:0 3px 0 #5b6fb3,0 6px 24px rgba(11,20,48,.5)}
+
+#hint{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 96px);transform:translateX(-50%);width:min(420px,calc(100% - 32px));text-align:center;line-height:1.5;font-size:13px;color:var(--foam-dim);pointer-events:none;text-shadow:0 1px 8px rgba(11,20,48,.7)}
+#fade{position:fixed;inset:0;background:var(--ink);opacity:0;pointer-events:none;transition:opacity .45s}
+
+#overlay{position:fixed;inset:0;display:grid;place-items:center;box-sizing:border-box;padding:20px max(16px,env(safe-area-inset-right,0px)) 20px max(16px,env(safe-area-inset-left,0px));background:linear-gradient(180deg,rgba(11,20,48,.1),rgba(11,20,48,.45))}
+.card{width:100%;max-width:390px;box-sizing:border-box;background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:22px;padding:20px 18px 16px;display:flex;flex-direction:column;gap:12px;max-height:100%;overflow:hidden}
+#overlay{grid-template-rows:minmax(0,1fr);grid-template-columns:minmax(0,1fr)}
+#card{align-self:center;justify-self:center}
+.card-body::-webkit-scrollbar{width:4px}
+.card-body::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px}
+.card-head{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:10px;flex:none}
+.title-wrap{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1 1 auto}
+.head-btns{display:flex;flex-direction:column;gap:6px;align-items:stretch;flex:none}
+.head-btns .go{flex:none;font-size:18px;padding:10px 14px;white-space:nowrap}
+.head-btns .snd{padding:6px 8px;font-size:12px;border-radius:10px;white-space:nowrap}
+.card-body{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;gap:13px;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;border-top:1px solid var(--line);padding:12px 4px 4px 0}
+.card-body > *{flex:none}
+.card-body{max-height:calc(100vh - 240px);max-height:calc(100dvh - 240px)}
+#overlay{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+.tabs{display:flex;gap:6px;flex:none}
+.visits{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--foam-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
+.visits b{color:var(--sun);font-weight:500}
+.tab{flex:1;font-size:13px;font-weight:600;color:var(--foam-dim);background:rgba(234,250,246,.06);border:1px solid var(--line);border-radius:10px;padding:8px 6px}
+.tab.on{color:var(--ink);background:var(--aqua);border-color:var(--aqua)}
+.card-body section{display:flex;flex-direction:column;gap:10px}
+.rec-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.rs{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-radius:10px;background:rgba(234,250,246,.06);min-width:0}
+.rs .v{font-family:var(--mono);font-size:16px;color:var(--foam);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rs.hi .v{color:var(--sun)}
+.rs .k{font-size:10.5px;color:var(--foam-dim);white-space:nowrap}
+.rec-list{display:flex;flex-direction:column;gap:4px}
+.rr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:baseline;gap:10px;padding:6px 8px;border-radius:8px;font-size:12px;color:var(--foam-dim)}
+.rr:nth-child(odd){background:rgba(234,250,246,.04)}
+.rr .d{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.rr .m{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rr .s{font-family:var(--mono);font-size:14px;color:var(--foam);font-variant-numeric:tabular-nums}
+.rr.top .s{color:var(--ink);background:var(--sun);padding:0 6px;border-radius:6px}
+.rec-empty{font-size:13px;color:var(--foam-dim);padding:10px 0}
+.rec-foot{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.rec-note{font-size:11px;color:var(--foam-dim)}
+.rec-clear{font-size:12px;color:var(--foam-dim);background:transparent;border:1px solid var(--line);border-radius:8px;padding:5px 9px}
+.rec-clear.arm{color:var(--ink);background:var(--coral);border-color:var(--coral)}
+.end-btns{display:flex;gap:8px}
+.end-btns .rec-open{font-size:13px;color:var(--foam);background:transparent;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+.card-body section[hidden]{display:none}
+.kicker{font-family:var(--mono);font-size:11px;letter-spacing:.18em;color:var(--coral);text-transform:uppercase}
+.card h1{font-family:var(--display);font-weight:400;font-size:clamp(28px,8.5vw,44px);white-space:nowrap;line-height:1;margin:0;color:var(--sun);text-shadow:0 4px 0 var(--coral);text-wrap:balance}
+.card p{margin:0;font-size:14px;line-height:1.6;color:var(--foam-dim)}
+.steps{display:grid;grid-template-columns:auto 1fr;gap:7px 12px;font-size:13px;align-items:baseline;margin:0}
+.steps dt{font-family:var(--mono);font-size:12px;color:var(--aqua)}
+.steps dd{margin:0;color:var(--foam-dim)}
+.stats{display:flex;flex-wrap:wrap;gap:6px}
+.row{display:flex;gap:10px;align-items:center}
+button{font-family:var(--body);cursor:pointer}
+.go{flex:1;font-family:var(--display);font-size:22px;color:var(--ink);background:var(--sun);border:0;border-radius:14px;padding:12px 16px;box-shadow:0 4px 0 var(--coral);transition:transform .12s}
+.go:active{transform:translateY(3px);box-shadow:0 1px 0 var(--coral)}
+.snd{font-size:13px;color:var(--foam);background:transparent;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
+#camBtn{position:fixed;pointer-events:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 126px);right:max(16px,env(safe-area-inset-right,0px));font-size:12px;color:var(--foam);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+#camBtn.on{border-color:var(--aqua);color:var(--aqua)}
+#trickBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:flex;gap:10px;z-index:3}
+.tb{width:62px;height:62px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;background:var(--glass);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid var(--line);color:var(--foam);touch-action:none;padding:0}
+.tb b{font-size:18px;line-height:1;color:var(--sun)}
+.tb span{font-size:11px;font-weight:600}
+.tb:active,.tb.on{background:var(--aqua);color:var(--ink);border-color:var(--aqua)}
+.tb:active b,.tb.on b{color:var(--ink)}
+.tb.off{opacity:.45}
+#trickBtn{position:fixed;pointer-events:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 162px);right:max(16px,env(safe-area-inset-right,0px));font-size:12px;color:var(--ink);background:var(--sun);border:0;border-radius:999px;padding:6px 12px;font-weight:600}
+#tricks{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);width:min(380px,calc(100% - 32px));max-height:calc(100% - 80px);box-sizing:border-box;display:flex;flex-direction:column;gap:10px;padding:16px 16px 12px;background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:18px;z-index:5}
+#tricks[hidden]{display:none}
+.tk-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex:none}
+#trickClose{font-family:var(--display);font-size:15px;color:var(--ink);background:var(--sun);border:0;border-radius:10px;padding:7px 12px;box-shadow:0 3px 0 var(--coral)}
+.tk-body{overflow-y:auto;min-height:0;max-height:calc(100vh - 170px);max-height:calc(100dvh - 170px);display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain}
+#mute{position:fixed;pointer-events:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 90px);right:max(16px,env(safe-area-inset-right,0px));font-size:12px;color:var(--foam-dim);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
+@media (prefers-reduced-motion: reduce){#toast,#fade{transition:none}}
+</style>
+
+<div id="stage"></div>
+
+<div class="hud tl">
+  <span class="label">히트</span>
+  <span class="mid" id="timer">2:00</span>
+  <span class="label" style="margin-top:6px">베스트 2 웨이브</span>
+  <span class="total" id="total">0.00<small>/ 20</small></span>
+</div>
+<div class="hud tr">
+  <span class="label">웨이브 스코어</span>
+  <div class="chips" id="chips"><span class="chip">—</span></div>
+  <span class="report" id="swell" style="margin-top:6px">세트 대기 중</span>
+</div>
+
+<div id="ride" hidden>
+  <span id="ridePts">0</span>
+  <span id="lipz">립 존 · 지금 튕기면 퍼펙트</span>
+  <div class="pocket"><span>컬</span><div class="ptrack"><i></i><b id="pmark"></b></div><span>숄더</span></div>
+</div>
+
+<div id="meter" hidden>
+  <div class="mtop"><span id="mmsg">세트가 들어와요</span><span id="mdist"></span></div>
+  <div class="mtrack"><div class="mzone" id="mzone"></div><div class="mperf" id="mperf"></div><div class="mme"></div><div id="mwave"></div></div>
+</div>
+<div id="hint" hidden></div>
+<button id="mute" type="button" hidden>소리 켜짐</button>
+<button id="camBtn" type="button" hidden>카메라 · 자동</button>
+<div id="trickBar" hidden>
+  <button type="button" class="tb" data-t="left"><b>↺</b><span id="tbL">컷백</span></button>
+  <button type="button" class="tb" data-t="right"><b>✦</b><span id="tbR">스냅</span></button>
+  <button type="button" class="tb" data-t="air"><b>↑</b><span id="tbA">에어</span></button>
+  <button type="button" class="tb" data-t="hang"><b>●</b><span>행텐(꾹)</span></button>
+</div>
+<button id="trickBtn" type="button" hidden aria-expanded="false" aria-controls="tricks">기술 목록</button>
+<div id="tricks" hidden role="dialog" aria-label="서핑 기술 목록">
+  <div class="tk-head"><span class="kicker">일시정지 · 기술 목록</span><button id="trickClose" type="button">닫고 계속</button></div>
+  <div class="tk-body">
+    <dl class="steps">
+      <dt>↕ 드래그</dt><dd>페이스 오르내리기 · 내려가면 가속, 올라가면 감속</dd>
+      <dt>바텀턴 · 탑턴</dt><dd>바닥까지 내려갔다 올라가기, 립 근처까지 올라갔다 내려오기</dd>
+      <dt>위로 튕기기</dt><dd>페이스 위쪽에서: 컬 근처면 스냅, 숄더에서 빠르면 에어 · 아래쪽에선 바텀턴 · Space</dd>
+      <dt>왼쪽 튕기기</dt><dd>컷백 · 컬 쪽으로 되돌아 턴 · ← 키</dd>
+      <dt>오른쪽 튕기기</dt><dd>카빙, 페이스 위쪽이면 스냅 · → 키</dd>
+      <dt>립 존</dt><dd>상단 '립 존'에 불이 들어올 때 튕기면 퍼펙트 ×1.5</dd>
+      <dt>공중에서 원</dt><dd>원 하나에 반 바퀴씩 추가 회전(540·720) · 탭하면 그랩</dd>
+      <dt>꾹 누르기</dt><dd>움직이지 않고 누르고 있으면 행텐 · H 키</dd>
+      <dt>콤보</dt><dd>기술을 3초 안에 이어가면 점수 배수가 올라가요</dd>
+      <dt>배럴</dt><dd>속도를 늦춰 컬 안에 머물기 · 너무 깊으면 와이프아웃</dd>
+    </dl>
+    <span class="kicker">패들링</span>
+    <dl class="steps">
+      <dt>← → ↑ ↓ 드래그</dt><dd>피크 쪽으로 자리 잡기</dd>
+      <dt>탭 · Space</dt><dd>초록 구간에서 테이크오프</dd>
+    </dl>
+  </div>
+</div>
+<div id="toast"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
+<div id="fade"></div>
+
+<div id="overlay">
+  <div class="card" id="card">
+    <div class="card-head">
+      <div class="title-wrap">
+        <span class="kicker">Surf metaverse · Heat 2:00</span>
+        <h1>선셋 스웰</h1>
+        <span class="visits" data-visits hidden></span>
+      </div>
+      <div class="head-btns">
+        <button class="go" type="button">패들 아웃</button>
+        <button class="snd" type="button" aria-pressed="true">파도 소리 켬</button>
+      </div>
+    </div>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" class="tab on" data-tab="intro" aria-selected="true">소개</button>
+      <button type="button" role="tab" class="tab" data-tab="how" aria-selected="false">타는 법</button>
+      <button type="button" role="tab" class="tab" data-tab="moves" aria-selected="false">기술</button>
+      <button type="button" role="tab" class="tab" data-tab="records" aria-selected="false">기록</button>
+    </div>
+    <div class="card-body">
+      <section data-pane="intro">
+        <p>라인업에 앉아 세트를 기다리다가, 파도가 등 뒤로 솟아오르는 순간 패들해서 잡아요. 립이 말려 내려오는 배럴 앞 포켓을 지키면서 끝까지 타면 돼요.</p>
+        <p>대회처럼 2분 동안 탄 웨이브 중 상위 2개 점수(각 10점)를 합산해요.</p>
+      </section>
+      <section data-pane="how" hidden>
+        <dl class="steps">
+          <dt>1 자리 잡기</dt><dd>드래그로 패들해서 피크 쪽으로 가요</dd>
+          <dt>2 테이크오프</dt><dd>초록 구간에서 탭 (Space). 가운데면 퍼펙트</dd>
+          <dt>3 라이딩</dt><dd>위/아래 드래그로 페이스를 오르내려요</dd>
+          <dt>4 배럴</dt><dd>속도를 늦춰 컬 안으로 들어가면 보너스</dd>
+        </dl>
+      </section>
+      <section data-pane="moves" hidden>
+        <dl class="steps">
+          <dt>↑ 튕기기</dt><dd>립 근처면 스냅, 빠르면 에어</dd>
+          <dt>← 튕기기</dt><dd>컷백 · 되돌아 턴</dd>
+          <dt>→ 튕기기</dt><dd>카빙 · 스냅</dd>
+          <dt>공중에서 원</dt><dd>한 바퀴마다 회전 추가 · 탭 그랩</dd>
+          <dt>꾹 누르기</dt><dd>행텐 · 노즈라이딩</dd>
+        </dl>
+      </section>
+      <section data-pane="records" hidden>
+        <div class="rec-sum" id="recSum"></div>
+        <div class="rec-list" id="recList"></div>
+        <div class="rec-foot"><span class="rec-note">이 기기 브라우저에만 저장돼요</span><button type="button" class="rec-clear" id="recClear">기록 지우기</button></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const rand = (a,b) => a + Math.random()*(b-a);
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const sstep = (a,b,v) => { const k = clamp((v-a)/(b-a),0,1); return k*k*(3-2*k); };
+const lerp = (a,b,k) => a + (b-a)*k;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const HEAT = 120;
+
+/* ---------- renderer ---------- */
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+$('stage').appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0xf0b088, 80, 320);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1400);
+function resize(){
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+
+/* ---------- sky ---------- */
+const skyGroup = new THREE.Group(); scene.add(skyGroup);
+skyGroup.add(new THREE.Mesh(new THREE.SphereGeometry(700, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { top:{value:new THREE.Color(0x2f3f7a)}, mid:{value:new THREE.Color(0xd9807e)}, bot:{value:new THREE.Color(0xffcf96)} },
+  vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+  fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 bot; varying vec3 vP; void main(){ float h = vP.y; vec3 c = h > 0.1 ? mix(mid, top, smoothstep(0.1, 0.5, h)) : mix(bot, mid, smoothstep(-0.02, 0.1, h)); gl_FragColor = vec4(c, 1.0); }'
+})));
+const sunGlow = new THREE.Mesh(new THREE.CircleGeometry(90, 48), new THREE.MeshBasicMaterial({ color: 0xffc887, transparent: true, opacity: 0.3, fog: false, depthWrite: false }));
+const sunDisk = new THREE.Mesh(new THREE.CircleGeometry(34, 48), new THREE.MeshBasicMaterial({ color: 0xfff0c0, fog: false }));
+sunGlow.position.set(-170, 30, -600); sunDisk.position.set(-170, 30, -599);
+sunGlow.lookAt(0, 30, 0); sunDisk.lookAt(0, 30, 0);
+skyGroup.add(sunGlow, sunDisk);
+const headMat = new THREE.MeshBasicMaterial({ color: 0x4b3260, fog: false });
+[[-420,-320,90,48],[-380,-200,60,30],[420,-380,110,40],[360,-520,70,26]].forEach(([x,z,r,h]) => {
+  const m = new THREE.Mesh(new THREE.ConeGeometry(r, h, 7), headMat); m.position.set(x, h/2 - 6, z); skyGroup.add(m);
+});
+
+scene.add(new THREE.HemisphereLight(0xffd0b0, 0x0b3550, 0.85));
+const sunLight = new THREE.DirectionalLight(0xffcf94, 1.0); sunLight.position.set(-170, 60, -300); scene.add(sunLight);
+const fillLight = new THREE.DirectionalLight(0x9fb8ff, 0.35); fillLight.position.set(60, 40, 120); scene.add(fillLight);
+
+/* ---------- wave profile keyframes (dz shoreward +, y up) ---------- */
+const K = [
+  [[-18,-.7],[-11,.25],[-5,1.3],[0,2.3],[.9,2.25],[1.7,2.1],[2.4,1.92],[3.1,1.7],[3.9,1.42],[5.4,.9],[8.2,.3],[14,-.7]],
+  [[-18,-.7],[-11,.35],[-5,1.9],[0,3.9],[.8,3.95],[1.4,3.75],[1.7,3.45],[1.85,3.1],[1.95,2.6],[2.3,1.5],[3.8,.45],[10,-.7]],
+  [[-18,-.7],[-11,.4],[-5,2.2],[-.5,4.4],[2.4,4.65],[4.6,2.6],[3.4,3.55],[1.6,3.85],[.55,2.95],[.75,1.45],[2.3,.35],[10,-.7]],
+  [[-18,-.7],[-11,.4],[-5,2.1],[-.5,4.1],[2.8,4.3],[5.6,.6],[4.6,1.9],[2.2,3.2],[.8,2.6],[1.0,1.3],[2.6,.3],[10,-.7]],
+  [[-18,-.7],[-11,.3],[-5,1.2],[-.5,1.9],[1.2,2.05],[2.6,1.85],[3.3,1.75],[3.8,1.6],[4.4,1.4],[5.4,1.0],[7.5,.45],[12,-.7]]
+];
+const KB = [0, .35, .7, .88, 1];
+const NP = 12, SEGS = NP - 1, SUB = 8, NR = SEGS * SUB + 1;
+const ctrlBuf = new Float32Array(NP * 2);
+function ctrlAt(b){
+  let i = 0; while (i < KB.length - 2 && b > KB[i+1]) i++;
+  let k = clamp((b - KB[i]) / (KB[i+1] - KB[i]), 0, 1); k = k*k*(3-2*k);
+  const A = K[i], B = K[i+1];
+  for (let p = 0; p < NP; p++){ ctrlBuf[p*2] = lerp(A[p][0], B[p][0], k); ctrlBuf[p*2+1] = lerp(A[p][1], B[p][1], k); }
+  return ctrlBuf;
+}
+function cr(p0, p1, p2, p3, t){ const t2 = t*t, t3 = t2*t; return 0.5*((2*p1) + (-p0+p2)*t + (2*p0-5*p1+4*p2-p3)*t2 + (-p0+3*p1-3*p2+p3)*t3); }
+const profZ = new Float32Array(NR), profY = new Float32Array(NR);
+function sampleCtrl(c){
+  for (let s = 0; s < SEGS; s++){
+    const i0 = Math.max(0, s-1), i1 = s, i2 = s+1, i3 = Math.min(NP-1, s+2);
+    for (let j = 0; j < SUB; j++){
+      const t = j / SUB, r = s*SUB + j;
+      profZ[r] = cr(c[i0*2], c[i1*2], c[i2*2], c[i3*2], t);
+      profY[r] = cr(c[i0*2+1], c[i1*2+1], c[i2*2+1], c[i3*2+1], t);
+    }
+  }
+  profZ[NR-1] = c[(NP-1)*2]; profY[NR-1] = c[(NP-1)*2+1];
+}
+
+/* ---------- wave state ---------- */
+const W = { z: -95, c: 8.5, s: 0.9, peakX: -3, R: -10, vp: 11, breaking: false, preB: 0.05, closing: 0 };
+function envX(x){ const d = x - W.peakX; return d > 0 ? 1 - 0.45*sstep(100, 170, d) : 1 - 0.45*sstep(70, 140, -d); }
+function stageAt(x){
+  let b;
+  if (!W.breaking) b = W.preB;
+  else {
+    const d = x - W.peakX;
+    const u = W.R - (d < 0 ? -d*1.3 : d);
+    if (u < -40) b = 0.3;
+    else if (u < -12) b = 0.3 + 0.12*sstep(-40, -12, u);
+    else if (u < 0) b = 0.42 + 0.28*sstep(-12, 0, u);
+    else if (u < 7) b = 0.7 + 0.18*(u/7);
+    else if (u < 18) b = 0.88 + 0.12*((u-7)/11);
+    else b = 1;
+    b = Math.max(b, W.closing);
+  }
+  return b;
+}
+function uAt(x){ const d = x - W.peakX; return W.R - (d < 0 ? -d*1.3 : d); }
+function H0(x, z, t){
+  return 0.16*Math.sin(0.21*x + 0.33*z + 1.9*t) + 0.11*Math.sin(-0.37*x + 0.29*z + 2.6*t) + 0.07*Math.sin(0.6*x + 0.8*z + 3.4*t) - 0.15;
+}
+const n2 = (x, y) => Math.sin(x*1.7 + Math.sin(y*1.3)) * Math.sin(y*1.9 + Math.sin(x*0.7));
+
+/* height of the (unbroken) wave surface at world point, for paddling / floating */
+function surfaceY(x, z, t){
+  const base = H0(x, z, t);
+  const e = envX(x) * W.s, dz = (z - W.z) / W.s;
+  if (dz < -18 || dz > 14) return base;
+  sampleCtrl(ctrlAt(stageAt(x)));
+  let best = -9;
+  for (let r = 0; r < NR - 1; r++){
+    const z0 = profZ[r], z1 = profZ[r+1];
+    if ((dz - z0) * (dz - z1) <= 0 && z0 !== z1){
+      const y = lerp(profY[r], profY[r+1], (dz - z0) / (z1 - z0));
+      if (y > best) best = y;
+    }
+  }
+  return Math.max(base, best * e + base * 0.4);
+}
+/* point on the wave face: f = 0 bottom, 1 top (just under the lip) */
+const FP = { z: 0, y: 0 };
+function facePt(x, f){
+  const c = ctrlAt(stageAt(x)), e = envX(x) * W.s;
+  let az, ay, bz, by, k;
+  if (f < 0.6){ az = c[20]; ay = c[21]; bz = c[18]; by = c[19]; k = f / 0.6; }
+  else { az = c[18]; ay = c[19]; bz = lerp(c[18], c[16], 0.7); by = lerp(c[19], c[17], 0.7); k = (f - 0.6) / 0.4; }
+  FP.z = W.z + lerp(az, bz, k) * W.s; FP.y = lerp(ay, by, k) * e;
+  return FP;
+}
+function lipTip(x){ const c = ctrlAt(stageAt(x)), e = envX(x)*W.s; return { z: W.z + c[10]*W.s, y: c[11]*e }; }
+
+/* ---------- water shader (shared by the breaking wave and the open ocean) ---------- */
+const SUN_DIR = new THREE.Vector3(-170, 60, -300).normalize();
+const waterMat = new THREE.ShaderMaterial({
+  fog: true, side: THREE.DoubleSide, extensions: { derivatives: true },
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+    time: { value: 0 }, L: { value: SUN_DIR },
+    sunCol: { value: new THREE.Color(1.0, 0.82, 0.58) },
+    skyTop: { value: new THREE.Color(0x3a4a86) }, skyHor: { value: new THREE.Color(0xf2b58e) },
+    deep: { value: new THREE.Color(0.015, 0.09, 0.14) }, shallow: { value: new THREE.Color(0.06, 0.37, 0.40) },
+    sssCol: { value: new THREE.Color(0.13, 0.55, 0.45) }
+  }]),
+  vertexShader: `
+    attribute float foam; attribute float thick; attribute float shade;
+    varying vec3 vW; varying vec3 vN; varying float vFoam; varying float vThick; varying float vShade;
+    #include <fog_pars_vertex>
+    void main(){
+      vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz;
+      vN = normalize(mat3(modelMatrix) * normal);
+      vFoam = foam; vThick = thick; vShade = shade;
+      vec4 mvPosition = viewMatrix * w;
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: `
+    uniform float time; uniform vec3 L; uniform vec3 sunCol; uniform vec3 skyTop; uniform vec3 skyHor;
+    uniform vec3 deep; uniform vec3 shallow; uniform vec3 sssCol;
+    varying vec3 vW; varying vec3 vN; varying float vFoam; varying float vThick; varying float vShade;
+    #include <fog_pars_fragment>
+    float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float noise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
+      return mix(mix(hash(i), hash(i+vec2(1.0,0.0)), u.x), mix(hash(i+vec2(0.0,1.0)), hash(i+vec2(1.0,1.0)), u.x), u.y); }
+    float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++){ s += a*noise(p); p = p*2.03 + vec2(1.7, 9.2); a *= 0.5; } return s; }
+    vec2 ripple(vec2 p, float t){
+      vec2 g = vec2(0.0);
+      g += vec2(0.8, 0.6)   * cos(dot(p, vec2(0.8, 0.6))   * 1.7 + t*2.1) * 0.10;
+      g += vec2(-0.5, 0.86) * cos(dot(p, vec2(-0.5, 0.86)) * 2.9 + t*2.9) * 0.08;
+      g += vec2(0.2, -0.98) * cos(dot(p, vec2(0.2, -0.98)) * 4.3 + t*3.7) * 0.06;
+      g += vec2(0.95, 0.3)  * cos(dot(p, vec2(0.95, 0.3))  * 7.1 + t*4.9) * 0.045;
+      g += vec2(-0.7, -0.7) * cos(dot(p, vec2(-0.7, -0.7)) * 11.3 + t*6.3) * 0.03;
+      return g;
+    }
+    void main(){
+      vec3 V = normalize(cameraPosition - vW);
+      vec3 N = normalize(vN); if (dot(N, V) < 0.0) N = -N;
+      vec2 rp = vec2(vW.x, vW.z + vW.y * 0.8);
+      vec2 g = ripple(rp, time) * (1.0 - clamp(vFoam, 0.0, 1.0) * 0.85);
+      N = normalize(N + vec3(-g.x, 0.0, -g.y) * 0.9);
+      float ndv = clamp(dot(N, V), 0.0, 1.0);
+      float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+      vec3 R = reflect(-V, N);
+      vec3 sky = mix(skyHor, skyTop, smoothstep(0.0, 0.45, clamp(R.y, 0.0, 1.0)));
+      float sr = max(dot(R, L), 0.0);
+      vec3 spec = sunCol * (pow(sr, 1200.0) * 9.0 + pow(sr, 90.0) * 0.45 + pow(sr, 12.0) * 0.06);
+      float diff = clamp(dot(N, L) * 0.5 + 0.5, 0.0, 1.0);
+      vec3 body = mix(deep, shallow, vShade) * (0.78 + 0.4 * diff);
+      float back = pow(clamp(dot(-V, L) * 0.5 + 0.5, 0.0, 1.0), 2.0);
+      float streak = fbm(vec2(vW.x * 0.18, vW.y * 1.6 + vW.z * 0.3 - time * 0.4));
+      vec3 sss = sssCol * vThick * (0.12 + 0.75 * back) * (0.55 + 0.7 * streak);
+      vec3 col = body + sss;
+      col = mix(col, sky, fres * (1.0 - vThick * 0.5)) + spec * (1.0 - clamp(vFoam, 0.0, 1.0));
+      // foam: churned body + lacy edges + thin streaks drawn down the face
+      float fd = fbm(vW.xz * vec2(0.7, 1.1) + vec2(vW.y * 0.6, time * 0.5));
+      float lace = fbm(vW.xz * 2.6 + vec2(time * 0.25, vW.y * 2.0));
+      float fm = smoothstep(0.3, 0.72, vFoam * (0.5 + 0.95 * fd));
+      fm += smoothstep(0.62, 0.7, vFoam * 1.4 * lace) * 0.55;
+      float lines = smoothstep(0.7, 0.78, fbm(vec2(vW.x * 0.9, vW.y * 0.25 + vW.z * 0.08)));
+      fm += lines * vShade * (1.0 - vThick) * 0.18;
+      vec3 foamCol = vec3(1.0, 0.965, 0.92) * (0.62 + 0.38 * diff) + sunCol * 0.1;
+      col = mix(col, foamCol, clamp(fm, 0.0, 1.0));
+      gl_FragColor = vec4(col, 1.0);
+      #include <fog_fragment>
+    }`
+});
+
+/* ---------- wave ribbon mesh ---------- */
+const NC = 120, DX = 2.0;
+const rGeo = new THREE.BufferGeometry();
+const rPos = new Float32Array(NC * NR * 3), rFoam = new Float32Array(NC * NR), rThick = new Float32Array(NC * NR), rShade = new Float32Array(NC * NR);
+rGeo.setAttribute('position', new THREE.BufferAttribute(rPos, 3));
+rGeo.setAttribute('foam', new THREE.BufferAttribute(rFoam, 1));
+rGeo.setAttribute('thick', new THREE.BufferAttribute(rThick, 1));
+rGeo.setAttribute('shade', new THREE.BufferAttribute(rShade, 1));
+{ const idx = []; for (let c = 0; c < NC-1; c++) for (let r = 0; r < NR-1; r++){ const a = c*NR + r, b = a + NR; idx.push(a, b, a+1, b, b+1, a+1); } rGeo.setIndex(idx); }
+const ribbon = new THREE.Mesh(rGeo, waterMat);
+ribbon.frustumCulled = false; scene.add(ribbon);
+
+const RK = 44 / (NR - 1); // row index → the 0..44 scale the profile keyframes were tuned on
+function updateRibbon(camX, t){
+  waterMat.uniforms.time.value = t;
+  const x0 = Math.floor((camX - NC*DX/2) / DX) * DX;
+  for (let c = 0; c < NC; c++){
+    const x = x0 + c*DX, b = stageAt(x), e = envX(x) * W.s;
+    sampleCtrl(ctrlAt(b));
+    const foamAll = sstep(0.84, 1, b), lipFoam = sstep(0.5, 0.8, b), pitch = sstep(0.3, 0.75, b) * (1 - foamAll);
+    for (let r = 0; r < NR; r++){
+      const i = c*NR + r, rr = r * RK;
+      let y = profY[r] * e, z = W.z + profZ[r] * W.s;
+      if (foamAll > 0 && rr > 6 && rr < 44){ y += n2(x*0.5 + t*1.3, rr*0.6 - t*2) * 0.28 * foamAll * e; z += n2(rr*0.4, x*0.3 + t) * 0.3 * foamAll; }
+      y += H0(x, z, t) * 0.5;
+      rPos[i*3] = x; rPos[i*3+1] = y; rPos[i*3+2] = z;
+      // how bright/shallow the water reads: dark back, bright upper face, darker trough
+      rShade[i] = rr <= 12 ? 0.15 + 0.35 * sstep(2, 12, rr) : rr <= 24 ? 0.5 + 0.45 * ((rr - 12) / 12) : rr <= 40 ? 0.95 - 0.6 * ((rr - 24) / 16) : 0.35 - 0.15 * ((rr - 40) / 4);
+      // thin water near the crest/lip lets the low sun through
+      rThick[i] = Math.exp(-(((rr - 19.5) / 4) ** 2)) * (0.3 + 0.7 * pitch) * (1 - foamAll * 0.85) * clamp(e / W.s, 0.4, 1);
+      let fk = foamAll * (0.8 + 0.25 * n2(x*0.8, rr*0.9 + t*3));
+      if (rr >= 13 && rr <= 25) fk = Math.max(fk, lipFoam * (1 - Math.abs(rr - 19) / 6.5) * 0.9);
+      if (rr >= 8 && rr <= 14 && b < 0.5) fk = Math.max(fk, sstep(0.25, 0.4, b) * 0.35 * (1 - Math.abs(rr - 11) / 3));
+      rFoam[i] = clamp(fk, 0, 1);
+    }
+  }
+  rGeo.attributes.position.needsUpdate = true; rGeo.attributes.foam.needsUpdate = true;
+  rGeo.attributes.thick.needsUpdate = true; rGeo.attributes.shade.needsUpdate = true;
+  rGeo.computeVertexNormals();
+}
+
+/* ---------- open ocean around the wave ---------- */
+const OW = 280, OD = 320, OSX = 96, OSZ = 110;
+const oGeo = new THREE.PlaneGeometry(OW, OD, OSX, OSZ); oGeo.rotateX(-Math.PI/2);
+const oBase = oGeo.attributes.position.array.slice();
+const oN = oBase.length / 3;
+const oFoam = new Float32Array(oN), oShade = new Float32Array(oN);
+oGeo.setAttribute('foam', new THREE.BufferAttribute(oFoam, 1));
+oGeo.setAttribute('thick', new THREE.BufferAttribute(new Float32Array(oN), 1));
+oGeo.setAttribute('shade', new THREE.BufferAttribute(oShade, 1));
+const ocean = new THREE.Mesh(oGeo, waterMat);
+ocean.frustumCulled = false; scene.add(ocean);
+function updateOcean(camX, camZ, t){
+  const ox = Math.round(camX / (OW/OSX)) * (OW/OSX), oz = Math.round((camZ - 90) / (OD/OSZ)) * (OD/OSZ);
+  const a = oGeo.attributes.position.array;
+  for (let v = 0; v < oN; v++){
+    const i = v * 3, x = oBase[i] + ox, z = oBase[i+2] + oz;
+    a[i] = x; a[i+2] = z; a[i+1] = H0(x, z, t);
+    const zr = (z - W.z) / W.s;
+    oShade[v] = 0.12 + 0.3 * sstep(-60, 30, zr);
+    let f = 0;
+    if (W.breaking && zr > 4 && zr < 46){
+      const u = uAt(x);
+      if (u > 3) f = sstep(3, 14, u) * (1 - (zr - 4) / 42) * (0.45 + 0.55 * n2(x*0.35, zr*0.5 - t*0.9));
+    }
+    oFoam[v] = clamp(f, 0, 0.95);
+  }
+  oGeo.attributes.position.needsUpdate = true; oGeo.attributes.foam.needsUpdate = true; oGeo.attributes.shade.needsUpdate = true;
+  oGeo.computeVertexNormals();
+}
+
+/* ---------- particles ---------- */
+const dotCanvas = document.createElement('canvas'); dotCanvas.width = dotCanvas.height = 32;
+{ const c = dotCanvas.getContext('2d'); const g = c.createRadialGradient(16,16,0,16,16,16); g.addColorStop(0,'rgba(255,255,255,1)'); g.addColorStop(.45,'rgba(255,255,255,.65)'); g.addColorStop(1,'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0,0,32,32); }
+const dotTex = new THREE.CanvasTexture(dotCanvas);
+function makePool(n, size, opacity){
+  const pos = new Float32Array(n*3), vel = new Float32Array(n*3), life = new Float32Array(n), drag = new Float32Array(n);
+  for (let i = 0; i < n; i++) pos[i*3+1] = -999;
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size, map: dotTex, transparent: true, opacity, depthWrite: false, color: 0xfaf6ee }));
+  pts.frustumCulled = false; scene.add(pts);
+  return { n, pos, vel, life, drag, geo, head: 0, g: 14 };
+}
+const spray = makePool(2200, 0.38, 0.9);
+const mist = makePool(420, 3.4, 0.2); mist.g = -0.6;
+function emit(P, x, y, z, vx, vy, vz, sp, lmin = 0.5, lmax = 1.1){
+  const i = P.head; P.head = (P.head + 1) % P.n;
+  P.pos[i*3] = x; P.pos[i*3+1] = y; P.pos[i*3+2] = z;
+  P.vel[i*3] = vx + rand(-sp, sp); P.vel[i*3+1] = vy + rand(-sp*0.5, sp); P.vel[i*3+2] = vz + rand(-sp, sp);
+  P.life[i] = rand(lmin, lmax);
+}
+function stepPool(P, dt){
+  for (let i = 0; i < P.n; i++){
+    if (P.life[i] <= 0) continue;
+    P.life[i] -= dt;
+    if (P.life[i] <= 0){ P.pos[i*3+1] = -999; continue; }
+    P.vel[i*3+1] -= P.g * dt;
+    P.pos[i*3] += P.vel[i*3]*dt; P.pos[i*3+1] += P.vel[i*3+1]*dt; P.pos[i*3+2] += P.vel[i*3+2]*dt;
+  }
+  P.geo.attributes.position.needsUpdate = true;
+}
+function clearPools(){ [spray, mist].forEach(P => { P.life.fill(0); for (let i = 0; i < P.n; i++) P.pos[i*3+1] = -999; }); }
+function waveFX(dt, camX){
+  if (!W.breaking) return;
+  const sides = [ W.peakX + W.R, W.peakX - W.R/1.3 ];
+  for (const curlX of sides){
+    if (Math.abs(curlX - camX) > 90) continue;
+    const n = Math.floor(90 * dt * 60 / 60 * W.s) + 2;
+    for (let k = 0; k < n; k++){
+      const x = curlX + rand(-1.5, 9) * (curlX > W.peakX ? -1 : 1);
+      const L = lipTip(x);
+      emit(spray, x, L.y + rand(-0.2, 0.3), L.z, rand(-1,1), rand(-1, 2), rand(2, 5), 1.2, 0.4, 0.9);
+    }
+    for (let k = 0; k < 2; k++){
+      const x = curlX + rand(0, 14) * (curlX > W.peakX ? -1 : 1);
+      emit(mist, x, rand(0.5, 2.5)*W.s, W.z + rand(3, 7)*W.s, rand(-1,1), rand(1, 3), rand(1, 3), 0.8, 1.2, 2.4);
+    }
+    for (let k = 0; k < 3; k++){
+      const x = curlX + rand(4, 30) * (curlX > W.peakX ? -1 : 1);
+      emit(spray, x, rand(0.8, 1.8)*W.s, W.z + rand(1, 5)*W.s, rand(-1,1), rand(2, 5), rand(1, 4), 1.5, 0.3, 0.7);
+    }
+  }
+}
+
+/* ---------- surfer ---------- */
+const surfer = new THREE.Group(); scene.add(surfer);
+const M = c => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+const board = new THREE.Mesh(new THREE.SphereGeometry(0.5, 28, 12), new THREE.MeshLambertMaterial({ color: 0xffd27a }));
+board.scale.set(2.9, 0.16, 0.82); board.position.y = 0.05; surfer.add(board);
+const stripe = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 8), new THREE.MeshLambertMaterial({ color: 0xff6f4f }));
+stripe.scale.set(2.75, 0.17, 0.12); stripe.position.y = 0.06; surfer.add(stripe);
+const fin = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 8), M(0x1b2a5c)); fin.scale.set(1, 1.4, 0.25); fin.position.set(-1.15, -0.1, 0); surfer.add(fin);
+
+/* cute round character */
+const P = c => new THREE.MeshLambertMaterial({ color: c });
+const suit = P(0xff7a5c), skin = P(0xf5c39c), hair = P(0x3a2418), cream = P(0xfff1dc);
+const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1a1424 }), shineMat = new THREE.MeshBasicMaterial({ color: 0xffffff }), blushMat = new THREE.MeshBasicMaterial({ color: 0xff98a6 });
+const SPH = r => new THREE.SphereGeometry(r, 22, 16);
+function part(g, geo, m, x, y, z, rx = 0, rz = 0){ const p = new THREE.Mesh(geo, m); p.position.set(x, y, z); p.rotation.set(rx, 0, rz); g.add(p); return p; }
+function face(g, cx, cy, cz, dx, dz, r){
+  const sx = -dz, sz = dx;
+  for (const s of [-1, 1]){
+    const ex = cx + dx*r*0.9 + sx*s*r*0.34, ey = cy + r*0.06, ez = cz + dz*r*0.9 + sz*s*r*0.34;
+    const e = part(g, SPH(r*0.14), eyeMat, ex, ey, ez); e.scale.set(1, 1.3, 1);
+    part(g, SPH(r*0.05), shineMat, ex + dx*r*0.1 + sx*s*r*0.03, ey + r*0.07, ez + dz*r*0.1 + sz*s*r*0.03);
+    const b = part(g, SPH(r*0.13), blushMat, cx + dx*r*0.8 + sx*s*r*0.58, cy - r*0.22, cz + dz*r*0.8 + sz*s*r*0.58); b.scale.set(1, 0.55, 1);
+  }
+  const m = part(g, new THREE.TorusGeometry(r*0.1, r*0.025, 6, 12, Math.PI), eyeMat, cx + dx*r*0.95, cy - r*0.24, cz + dz*r*0.95);
+  m.rotation.set(0, Math.atan2(dx, dz), Math.PI);
+}
+const hairDome = r => new THREE.SphereGeometry(r, 22, 12, 0, Math.PI*2, 0, Math.PI*0.5);
+
+const stand = new THREE.Group(); surfer.add(stand);
+for (const s of [-1, 1]){
+  const ft = part(stand, SPH(0.15), cream, s*0.42, 0.14, 0); ft.scale.set(1.35, 0.7, 1.05);
+  part(stand, new THREE.CylinderGeometry(0.12, 0.13, 0.44, 14), suit, s*0.31, 0.38, 0, 0, s*0.42);
+}
+stand.rotation.y = Math.PI; // face the shore so the camera sees the face
+const torso = new THREE.Group(); torso.position.set(0, 0.56, 0); stand.add(torso);
+const body = part(torso, SPH(0.37), suit, 0, 0.32, 0); body.scale.set(1, 1.08, 0.92);
+const belly = part(torso, SPH(0.26), cream, 0, 0.27, -0.17); belly.scale.set(1, 1.1, 0.55);
+const head = new THREE.Group(); head.position.set(0, 0.99, -0.03); torso.add(head);
+part(head, SPH(0.41), skin, 0, 0, 0);
+part(head, hairDome(0.43), hair, 0, 0, 0, 0.3);
+part(head, SPH(0.1), hair, 0.06, 0.45, -0.07);
+face(head, 0, 0, 0, 0, -1, 0.41);
+function arm(g, s){
+  const pv = new THREE.Group(); pv.position.set(s*0.33, 0.48, 0); g.add(pv);
+  part(pv, new THREE.CylinderGeometry(0.09, 0.1, 0.34, 12), suit, s*0.17, 0, 0, 0, Math.PI/2);
+  part(pv, SPH(0.12), skin, s*0.37, 0, 0);
+  return pv;
+}
+const armF = arm(torso, 1), armB = arm(torso, -1);
+armF.rotation.z = 0.35; armB.rotation.z = -0.25;
+
+const prone = new THREE.Group(); surfer.add(prone);
+const pb = part(prone, SPH(0.37), suit, -0.08, 0.36, 0); pb.scale.set(1.35, 0.72, 1);
+part(prone, SPH(0.39), skin, 0.58, 0.64, 0);
+part(prone, hairDome(0.41), hair, 0.58, 0.64, 0, 0, 0.45);
+part(prone, SPH(0.1), hair, 0.5, 1.06, 0);
+face(prone, 0.58, 0.64, 0, 1, 0, 0.39);
+for (const s of [-1, 1]){
+  part(prone, new THREE.CylinderGeometry(0.11, 0.12, 0.48, 12), suit, -0.66, 0.3, s*0.15, 0, Math.PI/2);
+  const ft = part(prone, SPH(0.14), cream, -0.94, 0.32, s*0.15); ft.scale.set(0.8, 1, 1.1);
+}
+const paddles = [-1, 1].map(side => {
+  const pivot = new THREE.Group(); pivot.position.set(0.3, 0.46, side*0.37); prone.add(pivot);
+  part(pivot, new THREE.CylinderGeometry(0.09, 0.1, 0.38, 12), suit, 0, -0.2, 0);
+  part(pivot, SPH(0.12), skin, 0, -0.42, 0);
+  return pivot;
+});
+const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x06202c, transparent: true, opacity: 0.3, depthWrite: false }));
+shadow.rotation.x = -Math.PI/2; shadow.scale.set(1.6, 0.7, 1); scene.add(shadow);
+
+const basis = new THREE.Matrix4(), vF = new THREE.Vector3(), vU = new THREE.Vector3(), vS = new THREE.Vector3();
+function orient(fx, fy, fz, ux, uy, uz){
+  vU.set(ux, uy, uz).normalize();
+  vF.set(fx, fy, fz); vF.addScaledVector(vU, -vF.dot(vU)).normalize();
+  vS.crossVectors(vF, vU);
+  basis.makeBasis(vF, vU, vS);
+  surfer.quaternion.setFromRotationMatrix(basis);
+}
+
+/* ---------- game state ---------- */
+const S = { x: 0, z: 0, y: 0, f: 0.7, vf: 0, speed: 9, air: false, ah: 0, avy: 0, spin: 0, airT: 0, airDur: 1 };
+let mode = 'attract', phase = 'lineup', phaseT = 0, t = 0, heatLeft = HEAT;
+let waves = [], ridePts = 0, rideT = 0, inBarrel = 0, barrelBest = 0, topArmed = false, botArmed = false, cooldown = 0, autoTapped = false;
+let inputY = 0, inputX = 0, tapQueued = false;
+const camPos = new THREE.Vector3(0, 3, 8), look = new THREE.Vector3(0, 1, -5);
+const camOff = new THREE.Vector3(0, 2.2, 7.2), lookOff = new THREE.Vector3(0, 1.0, -5);
+const offT = new THREE.Vector3(), lookT = new THREE.Vector3();
+let anchorY = 0, padX = 0, padZ = 0;
+
+function newWave(){
+  S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0;
+  W.z = -95; W.s = rand(1.45, 1.9); W.c = 8.5 * (0.7 + 0.3 * W.s); W.peakX = S.x - 3 + (mode === 'play' ? rand(-14, 14) : rand(-1.5, 1.5)); W.R = -10; W.vp = rand(10.5, 12);
+  W.breaking = false; W.preB = 0.05; W.closing = 0;
+  phase = 'lineup'; phaseT = 0; autoTapped = false; ridePts = 0; rideT = 0; inBarrel = 0; barrelBest = 0;
+  $('swell').textContent = `페이스 ${(W.s * 4.4 * 0.92).toFixed(1)}m · 라이트 핸더 · 오프쇼어`;
+  clearPools();
+}
+
+/* ---------- input ---------- */
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
+  if (mode === 'play' && phase === 'ride' && !e.repeat){ if (e.code === 'ArrowLeft' || e.code === 'KeyA') trickQ = 'left'; if (e.code === 'ArrowRight' || e.code === 'KeyD') trickQ = 'right'; }
+  if (e.code === 'KeyC' && mode === 'play') cycleCam();
+  if (e.code === 'Enter' && mode !== 'play') startHeat();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+let ptr = null;
+const stage = $('stage');
+stage.addEventListener('pointerdown', e => {
+  const now0 = performance.now();
+  ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, t: now0, ay: e.clientY, hist: [{ x: e.clientX, y: e.clientY, t: now0 }], lastFlick: 0, px: e.clientX, py: e.clientY, mv: null, turn: 0 };
+  try { stage.setPointerCapture(e.pointerId); } catch (_) {}
+});
+stage.addEventListener('pointermove', e => {
+  if (!ptr || e.pointerId !== ptr.id) return;
+  const now = performance.now();
+  const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
+  if (Math.hypot(dx, dy) > 14) ptr.moved = true;
+  ptr.hist.push({ x: e.clientX, y: e.clientY, t: now });
+  while (ptr.hist.length > 2 && now - ptr.hist[0].t > 90) ptr.hist.shift();
+  if (phase === 'ride' && mode === 'play') gesture(e.clientX, e.clientY, now);
+  inputY = clamp(-(e.clientY - ptr.ay) / (window.innerHeight * 0.14), -1, 1);
+  inputX = clamp(dx / (window.innerWidth * 0.16), -1, 1);
+});
+// one-finger surfing: flick up = snap / air, flick sideways = cutback / carve, draw circles in the air = spin
+function gesture(x, y, now){
+  if (S.air){
+    const mx = x - ptr.px, my = y - ptr.py;
+    if (Math.hypot(mx, my) > 5){
+      if (ptr.mv){ const cr = ptr.mv.x * my - ptr.mv.y * mx, dot = ptr.mv.x * mx + ptr.mv.y * my; ptr.turn += Math.atan2(cr, dot); }
+      ptr.mv = { x: mx, y: my }; ptr.px = x; ptr.py = y;
+      if (Math.abs(ptr.turn) > Math.PI * 0.9){ trickQ = ptr.turn > 0 ? 'right' : 'left'; ptr.turn = 0; }
+    }
+    return;
+  }
+  ptr.px = x; ptr.py = y; ptr.mv = null; ptr.turn = 0;
+  if (now - ptr.lastFlick < 380) return;
+  const a = ptr.hist[0], dtm = Math.max(16, now - a.t);
+  const vx = (x - a.x) / dtm, vy = (y - a.y) / dtm;
+  if (vy < -0.9 && -vy > Math.abs(vx) * 1.1){ trickQ = 'up'; ptr.lastFlick = now; }
+  else if (Math.abs(vx) > 0.9 && Math.abs(vx) > Math.abs(vy) * 1.2){ trickQ = vx < 0 ? 'left' : 'right'; ptr.lastFlick = now; ptr.ay = y; }
+}
+function endPtr(e){
+  if (!ptr || e.pointerId !== ptr.id) return;
+  const quick = performance.now() - ptr.t < 260 && Math.abs(e.clientX - ptr.x) < 14 && Math.abs(e.clientY - ptr.y) < 14;
+  if (quick && mode === 'play' && phase === 'lineup') tapQueued = true;
+  if (quick && mode === 'play' && phase === 'ride') trickQ = 'tap';
+  ptr = null; inputY = 0; inputX = 0;
+}
+stage.addEventListener('pointerup', endPtr);
+stage.addEventListener('pointercancel', endPtr);
+
+/* ---------- audio ---------- */
+let soundOn = true, ac = null, master = null, rumble = null;
+function noiseBuf(){
+  const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+  let last = 0; for (let i = 0; i < len; i++){ const w = Math.random()*2-1; last = (last + 0.02*w) / 1.02; d[i] = last * 3.5; }
+  return buf;
+}
+function initAudio(){
+  if (ac) return;
+  try {
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = soundOn ? 1 : 0; master.connect(ac.destination);
+    const buf = noiseBuf();
+    const a = ac.createBufferSource(); a.buffer = buf; a.loop = true;
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 650;
+    const g = ac.createGain(); g.gain.value = 0.28;
+    const lfo = ac.createOscillator(); lfo.frequency.value = 0.11; const lg = ac.createGain(); lg.gain.value = 0.16;
+    lfo.connect(lg); lg.connect(g.gain); a.connect(lp); lp.connect(g); g.connect(master); a.start(); lfo.start();
+    const b = ac.createBufferSource(); b.buffer = buf; b.loop = true; b.playbackRate.value = 0.7;
+    const bp = ac.createBiquadFilter(); bp.type = 'lowpass'; bp.frequency.value = 1400;
+    rumble = ac.createGain(); rumble.gain.value = 0;
+    b.connect(bp); bp.connect(rumble); rumble.connect(master); b.start();
+  } catch (_) { ac = null; }
+}
+function blip(freq, dur, type = 'sine', vol = 0.1){
+  if (!ac || !soundOn) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, ac.currentTime); o.frequency.exponentialRampToValueAtTime(freq*1.5, ac.currentTime + dur);
+  g.gain.setValueAtTime(vol, ac.currentTime); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+  o.connect(g); g.connect(master); o.start(); o.stop(ac.currentTime + dur);
+}
+function setSound(on){
+  soundOn = on; if (master) master.gain.value = on ? 1 : 0;
+  document.querySelectorAll('.snd').forEach(b => { b.textContent = on ? '파도 소리 켬' : '파도 소리 끔'; b.setAttribute('aria-pressed', String(on)); });
+  $('mute').textContent = on ? '소리 켜짐' : '소리 꺼짐';
+}
+const REC_KEY = 'sunset-swell-records';
+function loadRecs(){ try { const r = JSON.parse(localStorage.getItem(REC_KEY) || '[]'); return Array.isArray(r) ? r : []; } catch (_) { return []; } }
+function saveRecs(r){ try { localStorage.setItem(REC_KEY, JSON.stringify(r.slice(0, 50))); } catch (_) {} }
+const pad2 = n => String(n).padStart(2, '0');
+function renderRecords(){
+  const sum = $('recSum'), list = $('recList'); if (!sum) return;
+  const r = loadRecs();
+  const bestH = r.reduce((m, h) => Math.max(m, h.total), 0);
+  const avg = r.length ? r.reduce((a, h) => a + h.total, 0) / r.length : 0;
+  const bestW = r.reduce((m, h) => Math.max(m, ...(h.waves.length ? h.waves : [0])), 0);
+  const barrel = r.reduce((m, h) => Math.max(m, h.barrel || 0), 0);
+  sum.innerHTML = `
+    <div class="rs hi"><span class="v">${bestH.toFixed(2)}</span><span class="k">최고 히트</span></div>
+    <div class="rs"><span class="v">${avg.toFixed(2)}</span><span class="k">평균</span></div>
+    <div class="rs"><span class="v">${bestW.toFixed(2)}</span><span class="k">최고 웨이브</span></div>
+    <div class="rs"><span class="v">${barrel.toFixed(1)}초</span><span class="k">최장 배럴</span></div>`;
+  if (!r.length){ list.innerHTML = '<div class="rec-empty">아직 기록이 없어요. 첫 히트를 타면 여기에 쌓여요.</div>'; return; }
+  const topIdx = r.findIndex(h => h.total === bestH);
+  list.innerHTML = r.slice(0, 6).map((h, i) => {
+    const d = new Date(h.at);
+    const meta = `웨이브 ${h.waves.length}개 · 기술 ${h.tricks || 0}${h.bestTrick ? ' · ' + h.bestTrick : ''}`;
+    return `<div class="rr${i === topIdx ? ' top' : ''}"><span class="d">${pad2(d.getMonth() + 1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}</span><span class="m">${meta}</span><span class="s">${h.total.toFixed(2)}</span></div>`;
+  }).join('') + (r.length > 6 ? `<div class="rec-note">최근 6개 · 전체 ${r.length}개 히트</div>` : '');
+}
+let clearArm = 0;
+function selectTab(name){
+  document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
+  document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
+  if (name === 'records') renderRecords();
+}
+function wireCard(){
+  document.querySelectorAll('.go').forEach(b => b.addEventListener('click', startHeat));
+  document.querySelectorAll('.snd').forEach(b => b.addEventListener('click', () => setSound(!soundOn)));
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab)));
+  document.querySelectorAll('.rec-open').forEach(b => b.addEventListener('click', () => { $('card').innerHTML = startCardHTML; wireCard(); setSound(soundOn); selectTab('records'); renderVisits(); }));
+  const c = $('recClear');
+  if (c) c.addEventListener('click', () => {
+    if (Date.now() - clearArm < 3000){ saveRecs([]); try { localStorage.removeItem('sunset-swell-best2'); } catch (_) {} clearArm = 0; c.classList.remove('arm'); c.textContent = '지웠어요'; renderRecords(); setTimeout(() => { c.textContent = '기록 지우기'; }, 1500); }
+    else { clearArm = Date.now(); c.classList.add('arm'); c.textContent = '한 번 더 누르면 삭제'; setTimeout(() => { if (Date.now() - clearArm >= 2900){ c.classList.remove('arm'); c.textContent = '기록 지우기'; } }, 3000); }
+  });
+}
+const startCardHTML = $('card').innerHTML;
+wireCard();
+
+/* ---------- cumulative visitor count (one count per browser) ---------- */
+const COUNTER_URL = 'https://abacus.jasoncameron.dev', COUNTER_NS = 'gca-sunset-swell', COUNTER_KEY = 'visitors';
+let visits = null;
+function renderVisits(){
+  document.querySelectorAll('[data-visits]').forEach(el => {
+    if (visits == null){ el.hidden = true; return; }
+    el.innerHTML = `누적 방문 <b>${visits.toLocaleString('ko-KR')}</b>명`; el.hidden = false;
+  });
+}
+async function countVisit(){
+  let seen = false;
+  try { seen = localStorage.getItem('sunset-swell-counted') === '1'; } catch (_) {}
+  const go = async op => {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 7000);
+    try { const r = await fetch(`${COUNTER_URL}/${op}/${COUNTER_NS}/${COUNTER_KEY}`, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); const j = await r.json(); const v = Number(j.value); if (!Number.isFinite(v)) throw new Error('bad'); return v; }
+    finally { clearTimeout(timer); }
+  };
+  try {
+    visits = await go(seen ? 'get' : 'hit');
+    if (!seen){ try { localStorage.setItem('sunset-swell-counted', '1'); } catch (_) {} }
+  } catch (_) { visits = null; }
+  renderVisits();
+}
+countVisit();
+$('mute').addEventListener('click', () => { initAudio(); setSound(!soundOn); });
+const CAM = { auto: '카메라 · 자동', tube: '카메라 · 튜브 안', side: '카메라 · 측면' };
+function cycleCam(){ camMode = camMode === 'auto' ? 'tube' : camMode === 'tube' ? 'side' : 'auto'; $('camBtn').textContent = CAM[camMode]; }
+$('camBtn').addEventListener('click', cycleCam);
+let paused = false;
+function setPaused(on){
+  paused = on; $('tricks').hidden = !on; $('trickBtn').setAttribute('aria-expanded', String(on));
+  ptr = null; inputX = 0; inputY = 0; tapQueued = false; trickQ = null;
+  if (ac){ try { on ? ac.suspend() : ac.resume(); } catch (_) {} }
+}
+$('trickBtn').addEventListener('click', () => setPaused(!paused));
+let holdBtn = false;
+document.querySelectorAll('.tb').forEach(b => {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (b.dataset.t === 'hang'){ holdBtn = true; b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (_) {} }
+    else trickQ = b.dataset.t;
+  });
+  const up = () => { if (b.dataset.t === 'hang'){ holdBtn = false; b.classList.remove('on'); } };
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
+$('trickClose').addEventListener('click', () => setPaused(false));
+
+/* ---------- UI ---------- */
+let toastTimer = 0;
+function toast(a, b = '', bad = false, ms = 1100){
+  $('t1').textContent = a; $('t2').textContent = b;
+  const el = $('toast'); el.classList.toggle('bad', bad); el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+const fmt = n => Math.round(n).toLocaleString('ko-KR');
+const toScore = p => Math.min(10, 10 * (1 - Math.exp(-p / 4500)));
+function bestTwo(){ const s = [...waves].sort((a,b) => b - a); return { list: s.slice(0, 2), total: (s[0] || 0) + (s[1] || 0) }; }
+function renderScores(){
+  const bt = bestTwo();
+  $('total').innerHTML = `${bt.total.toFixed(2)}<small>/ 20</small>`;
+  const used = [...bt.list];
+  $('chips').innerHTML = waves.length ? waves.map(w => { const i = used.indexOf(w); const best = i >= 0; if (best) used.splice(i, 1); return `<span class="chip${best ? ' best' : ''}">${w.toFixed(2)}</span>`; }).join('') : '<span class="chip">—</span>';
+}
+function showHint(txt){ const h = $('hint'); h.textContent = txt; h.hidden = !txt; }
+const PERF = [2.2, 3.6], WIN = [0.8, 5.5], TRACK = [30, -2];
+const pOf = dz => clamp((TRACK[0] - dz) / (TRACK[0] - TRACK[1]), 0, 1);
+$('mzone').style.left = (pOf(WIN[1]) * 94) + '%'; $('mzone').style.width = ((pOf(WIN[0]) - pOf(WIN[1])) * 94) + '%';
+$('mperf').style.left = (pOf(PERF[1]) * 94) + '%'; $('mperf').style.width = ((pOf(PERF[0]) - pOf(PERF[1])) * 94) + '%';
+
+function best(){ let b = 0; try { b = +localStorage.getItem('sunset-swell-best2') || 0; } catch (_) {} return Math.max(b, ...loadRecs().map(h => h.total), 0); }
+function saveBest(v){ try { localStorage.setItem('sunset-swell-best2', String(v)); } catch (_) {} }
+
+function startHeat(){
+  initAudio(); if (ac && ac.state === 'suspended') ac.resume();
+  mode = 'play'; heatLeft = HEAT; waves = []; renderScores(); heatStats = { tricks: 0, bestTrick: '', bestTrickPts: 0, barrel: 0 };
+  $('overlay').hidden = true; $('mute').hidden = false; $('camBtn').hidden = false; $('trickBtn').hidden = false;
+  newWave();
+}
+function endHeat(){
+  mode = 'end';
+  const bt = bestTwo(), b = best(), isBest = bt.total > b && waves.length > 0;
+  if (isBest) saveBest(bt.total);
+  const recs = loadRecs();
+  recs.unshift({ at: Date.now(), total: +bt.total.toFixed(2), waves: [...waves], tricks: heatStats.tricks, bestTrick: heatStats.bestTrick, barrel: +heatStats.barrel.toFixed(1) });
+  saveRecs(recs);
+  const rank = [...recs].sort((x, y) => y.total - x.total).findIndex(h => h === recs[0]) + 1;
+  setPaused(false); $('trickBar').hidden = true; holdBtn = false; $('mute').hidden = true; $('camBtn').hidden = true; $('trickBtn').hidden = true; $('meter').hidden = true; $('ride').hidden = true; showHint('');
+  $('card').innerHTML = `
+    <span class="kicker">Heat over · Best 2 waves</span>
+    <h1>${bt.total.toFixed(2)}</h1>
+    <p>${isBest ? '새 최고 히트 점수예요.' : `최고 히트 점수 ${Math.max(b, bt.total).toFixed(2)}`} · 탄 웨이브 ${waves.length}개 · 전체 ${recs.length}개 중 ${rank}위</p>
+    <div class="stats">${waves.length ? waves.map(w => `<span class="chip${bt.list.includes(w) ? ' best' : ''}">${w.toFixed(2)}</span>`).join('') : '<span class="chip">잡은 파도가 없어요</span>'}</div>
+    <div class="row"><button class="go" type="button">다시 패들 아웃</button><div class="end-btns"><button class="rec-open" type="button">기록 보기</button></div></div>`;
+  wireCard();
+  $('overlay').hidden = false;
+}
+
+/* ---------- phase transitions ---------- */
+function catchWave(dz){
+  const perfect = dz >= PERF[0] && dz <= PERF[1];
+  phase = 'ride'; phaseT = 0;
+  W.breaking = true; W.R = -10;
+  S.f = 0.78; S.speed = perfect ? 11 : 9.5; S.vf = 0; S.air = false;
+  Object.assign(T, { cut: 0, cutT: 0, float: false, floatT: 0, hang: 0, grab: false, extra: 0, spinDir: 1, snapT: 0, turnT: 0, turnKind: '', perfect: false }); stand.position.x = 0; squash = 0.35; cheerT = 0; comboN = 0; comboT = 0;
+  ridePts = perfect ? 450 : 180; rideT = 0; inBarrel = 0; topArmed = false; botArmed = false; cooldown = 0.6;
+  if (mode === 'play') toast(perfect ? '퍼펙트 테이크오프' : '테이크오프', `+${fmt(ridePts)}`);
+  blip(perfect ? 620 : 480, 0.2, 'triangle', 0.1);
+  for (let k = 0; k < 40; k++) emit(spray, S.x, S.y + 0.2, S.z, rand(-1,1), 3, rand(-2, 2), 2.5);
+}
+function endRide(kind){
+  const factor = kind === 'wipe' ? 0.65 : 1;
+  const sc = toScore(ridePts * factor);
+  if (mode === 'play'){ waves.push(+sc.toFixed(2)); renderScores(); }
+  phase = 'after'; phaseT = 0;
+  if (kind === 'wipe'){ for (let k = 0; k < 90; k++) emit(spray, S.x, S.y + 0.5, S.z, rand(-2,2), 5, rand(0, 4), 3.5); blip(130, 0.4, 'triangle', 0.16); }
+  if (mode === 'play') setTimeout(() => toast(`웨이브 ${sc.toFixed(2)}`, kind === 'wipe' ? '와이프아웃 감점 반영' : `라이딩 ${rideT.toFixed(1)}초`, false, 1600), kind === 'wipe' ? 900 : 0);
+  S.air = false;
+}
+function wipe(msg){ if (mode === 'play') toast('와이프아웃', msg, true); endRide('wipe'); }
+function missWave(msg){ if (mode === 'play') toast(msg, '다음 세트를 기다려요', true, 1400); phase = 'missed'; phaseT = 0; W.breaking = true; W.R = -10; }
+
+const T = { cut: 0, cutT: 0, float: false, floatT: 0, hang: 0, grab: false, extra: 0, spinDir: 1, snapT: 0, turnT: 0, turnKind: '', perfect: false };
+let trickQ = null, camMode = 'auto';
+let cheerT = 0, squash = 0, heatStats = { tricks: 0, bestTrick: '', bestTrickPts: 0, barrel: 0 };
+let comboN = 0, comboT = 0;
+const PO = { cr: 0, tw: 0.45, lx: -0.12, lz: 0, fz: 0.45, bz: -0.35, fy: 0, by: 0, hy: 0, hp: 0, hop: 0 };
+function trickToast(name, p){
+  cheerT = 0.9;
+  if (mode === 'play'){ heatStats.tricks++; if (p > heatStats.bestTrickPts){ heatStats.bestTrickPts = p; heatStats.bestTrick = name.replace(/ \d+\.\d초$/, ''); } }
+  comboN = comboT > 0 ? comboN + 1 : 1; comboT = 2.8;
+  const mult = Math.min(2, 1 + 0.25 * (comboN - 1)), bonus = Math.round(p * (mult - 1)); ridePts += bonus;
+  if (mode === 'play') toast(name, comboN > 1 ? `+${fmt(p + bonus)} · 콤보 ×${comboN}` : `+${fmt(p)}`, false, 900);
+}
+function launchAir(){
+  S.air = true; S.ah = 0; S.avy = 6 + S.speed * 0.15; S.airDur = 2 * S.avy / 20; S.airT = 0; S.spin = 0;
+  T.grab = false; T.extra = 0; T.spinDir = 1; T.perfect = S.f > 0.9; squash = 0.25;
+  if (mode === 'play') toast(T.perfect ? '퍼펙트 에어!' : '에어!', '손가락으로 원을 그리면 회전 · 탭 그랩', false, 800);
+  if (ptr){ ptr.turn = 0; ptr.mv = null; }
+}
+function sprayBurst(n, sp){ for (let k = 0; k < n; k++) emit(spray, surfer.position.x, surfer.position.y + 0.3, surfer.position.z, rand(-1, 1), 4, rand(0, 3), sp); }
+function snap(){
+  const top = S.f > 0.72, perfect = S.f > 0.9;
+  let p = Math.round(top ? 380 + S.speed * 22 : 160 + S.speed * 10); if (perfect) p = Math.round(p * 1.5);
+  ridePts += p; if (top) S.vf = -1.6; squash = 0.2; T.snapT = 0.45;
+  trickToast(perfect ? '퍼펙트 스냅' : top ? '스냅' : '카빙', p);
+  for (let k = 0; k < (top ? 80 : 35); k++) emit(spray, S.x - 0.6, S.y + 0.4, S.z, rand(-3, 1), rand(4, 8), rand(1, 4), 1.5);
+  blip(top ? 640 : 500, 0.12, 'sine', 0.07);
+}
+
+/* ---------- loop ---------- */
+let last = performance.now();
+function frame(now){
+  if (paused){ last = now; renderer.render(scene, camera); requestAnimationFrame(frame); return; }
+  const rawDt = Math.min(0.05, (now - last) / 1000); last = now;
+  let ts = 1;
+  const dzL = (S.z - W.z) / W.s;
+  if (phase === 'lineup' && mode === 'play' && dzL < 9 && dzL > -1) ts = 0.55;
+  const dt = rawDt * ts; t += dt; phaseT += dt;
+
+  // input
+  let iy = 0;
+  if (mode === 'play') iy = (keys.ArrowUp || keys.KeyW) ? 1 : (keys.ArrowDown || keys.KeyS) ? -1 : inputY;
+
+  // wave motion
+  W.z += W.c * dt;
+  if (W.breaking) W.R += W.vp * dt;
+  const camX = camPos.x;
+
+  /* ---- lineup: wait and time the paddle ---- */
+  if (phase === 'lineup' || phase === 'missed'){
+    const dz = (S.z - W.z) / W.s;
+    if (phase === 'lineup') W.preB = 0.05 + 0.3 * sstep(60, 3, dz);
+    if (phase === 'lineup' && !W.breaking && dz < 0) W.breaking = true;
+    // paddle to position: left/right along the wave, up = further out, down = toward shore
+    let mx = 0, mz = 0;
+    if (mode === 'play' && phase === 'lineup'){
+      mx = (keys.ArrowRight || keys.KeyD) ? 1 : (keys.ArrowLeft || keys.KeyA) ? -1 : inputX;
+      mz = -iy;
+    }
+    padX += (mx - padX) * (1 - Math.exp(-dt * 4)); padZ += (mz - padZ) * (1 - Math.exp(-dt * 4));
+    S.x = clamp(S.x + padX * 4.5 * dt, W.peakX - 30, W.peakX + 30);
+    S.z = clamp(S.z + padZ * 3.2 * dt, -8, 6);
+    S.y = surfaceY(S.x, S.z, t);
+    const sl = surfaceY(S.x, S.z + 0.8, t) - surfaceY(S.x, S.z - 0.8, t);
+    stand.visible = false; prone.visible = true;
+    const moving = Math.abs(padX) + Math.abs(padZ) > 0.15;
+    const pace = moving ? 10 : phase === 'lineup' && dz < 22 ? 9 : 3;
+    paddles[0].rotation.z = Math.sin(t * pace) * 1.3; paddles[1].rotation.z = Math.sin(t * pace + Math.PI) * 1.3;
+    if (moving && Math.random() < 0.5) emit(spray, S.x, S.y + 0.1, S.z, rand(-0.5,0.5), 1.2, rand(-0.5,0.5), 0.6, 0.2, 0.5);
+    surfer.position.set(S.x, S.y - 0.05, S.z + Math.sin(t * pace) * 0.02);
+    const fz = Math.abs(padZ) > 0.2 ? Math.sign(-padZ) : 1;
+    orient(padX * 0.8, sl * 0.5, fz, 0, 1, -sl * 0.4);
+
+    if (phase === 'lineup'){
+      if (mode !== 'play' && !autoTapped && dz < 3.0){ autoTapped = true; catchWave(dz); }
+      else if (tapQueued && mode === 'play'){
+        if (dz >= WIN[0] && dz <= WIN[1]) catchWave(dz);
+        else if (dz > WIN[1]){ if (cooldown <= 0){ toast('너무 일러요', '파도가 더 가까이 올 때까지', true, 800); cooldown = 0.6; } }
+        else { toast('늦었어요', '립에 밀려났어요', true); phase = 'missed'; phaseT = 0; }
+      }
+      if (phase === 'lineup' && dz < WIN[0] - 1.2) missWave('파도를 놓쳤어요');
+    } else if (phaseT > 3.2){ fadeReset(); }
+  }
+
+  /* ---- ride ---- */
+  else if (phase === 'ride'){
+    rideT += dt;
+    let dc = S.x - (W.peakX + W.R);
+    if (mode !== 'play'){ // autopilot shows off a few moves
+      iy = dc < 3 ? -1 : dc > 10 ? 0.9 : Math.sin(t * 2.2) * 0.9;
+      if (!S.air && !T.cut && !T.float && dc > 14 && Math.random() < dt * 0.5) trickQ = 'left';
+      else if (!S.air && S.f > 0.9 && Math.random() < dt * 1.2) trickQ = 'up';
+      else if (S.air && Math.random() < dt * 1.5) trickQ = 'right';
+    }
+    if (trickQ){
+      const q = trickQ; trickQ = null;
+      if (S.air){ if (q === 'tap') T.grab = true; else if (q !== 'up' && T.extra < 2){ T.extra++; T.spinDir = q === 'left' ? -1 : 1; if (mode === 'play') toast(`${360 + 180 * T.extra}!`, '', false, 500); } }
+      else if (!T.cut && !T.float && q !== 'tap'){
+        if (q === 'left'){ if (dc > 3){ T.cut = 1.1; T.cutT = 0; } else if (mode === 'play') toast('컬과 너무 가까워요', '조금 앞으로 나간 뒤 컷백', true, 800); }
+        else if (q === 'right') snap();
+        else if (q === 'up'){
+          if (S.f > 0.6){ if (S.speed > 9 && dc > 5) launchAir(); else snap(); }
+          else { S.vf = 2.3; T.turnT = 0.5; T.turnKind = 'bottom'; }
+        }
+      }
+    }
+    comboT -= dt; if (comboT <= 0) comboN = 0;
+    const holding = mode === 'play' && (keys.KeyH || holdBtn || (ptr && !ptr.moved && performance.now() - ptr.t > 520));
+    const prevF = S.f;
+    let dirMul = 1, cutTurn = 0;
+    if (T.cut > 0){
+      T.cutT += dt; const k = clamp(T.cutT / T.cut, 0, 1);
+      dirMul = Math.cos(Math.PI * 2 * k); cutTurn = Math.sin(Math.PI * 2 * k);
+      S.f += ((0.78 - 0.45 * Math.sin(Math.PI * k)) - S.f) * (1 - Math.exp(-dt * 6)); S.vf = 0;
+      if (k >= 1){ T.cut = 0; const p = Math.round(520 + S.speed * 22); ridePts += p; S.speed *= 0.92; trickToast('컷백', p); sprayBurst(60, 2); blip(600, 0.15, 'sine', 0.08); }
+    } else if (T.float){
+      T.floatT += dt; S.f = 1; S.vf = 0; ridePts += 320 * dt;
+      if (iy < 0.3 || dc < -1.5 || T.floatT > 1.8){ T.float = false; S.f = 0.72; cooldown = 0.6; const p = Math.round(300 + T.floatT * 420); ridePts += p; trickToast('플로터', p); sprayBurst(50, 2.5); }
+    } else {
+      const target = iy * 1.5 - 0.35;
+      S.vf += (target - S.vf) * (1 - Math.exp(-dt * 5));
+      if (!S.air){
+        S.f = clamp(S.f + S.vf * dt * 0.75, 0, 1);
+        if (S.f >= 1 && iy > 0.5 && cooldown <= 0){
+          if (dc < 6 && dc > -1){ T.float = true; T.floatT = 0; if (mode === 'play') toast('플로터!', '립 위를 미끄러져요', false, 700); }
+          else if (S.speed > 7) launchAir();
+        }
+      }
+    }
+    let power = 9 * Math.exp(-((dc - 4) ** 2) / 30) + 2;
+    power *= 0.4 + 0.8 * S.f;
+    if (T.cut > 0) power *= 0.5;
+    S.speed += (prevF - S.f) * 12 + (power - (0.022 * S.speed * S.speed + 0.5)) * dt;
+    S.speed = clamp(S.speed, 0, 28);
+    S.x += S.speed * dirMul * dt;
+    cooldown -= dt;
+    dc = S.x - (W.peakX + W.R);
+
+    const P = facePt(S.x, S.f), pz = P.z, py = P.y;
+    const P2 = facePt(S.x, clamp(S.f + 0.04, 0, 1)), tz = P2.z - pz, ty = P2.y - py;
+    let nz = ty, ny = -tz; const nl = Math.hypot(nz, ny) || 1; nz /= nl; ny /= nl;
+    if (ny < 0){ nz = -nz; ny = -ny; }
+    S.y = py + H0(S.x, pz, t) * 0.5; S.z = pz;
+
+    stand.visible = true; prone.visible = false;
+    let crouch = 0, hangX = 0;
+    if (S.air){
+      S.airT += dt; S.ah += S.avy * dt; S.avy -= 20 * dt;
+      const total = (Math.PI * 2 + Math.PI * T.extra) * T.spinDir;
+      S.spin += (total * clamp(S.airT / S.airDur, 0, 1) - S.spin) * Math.min(1, dt * 10);
+      surfer.position.set(S.x, S.y + S.ah, S.z - S.ah * 0.35);
+      orient(Math.cos(S.spin), 0.25, -Math.sin(S.spin) * 0.6, 0, 1, 0.3);
+      if (T.grab) crouch = 1;
+      if (S.ah < 0 && S.avy < 0){
+        S.air = false; S.f = 0.85; cooldown = 0.8;
+        const deg = 360 + 180 * T.extra;
+        let p = Math.round(700 + S.speed * 25 + T.extra * 420 + (T.grab ? 350 : 0)); if (T.perfect) p = Math.round(p * 1.4); ridePts += p;
+        trickToast(`${T.perfect ? '퍼펙트 ' : ''}${T.grab ? '그랩 ' : ''}에어 ${deg}`, p); blip(700, 0.25, 'sine', 0.1); sprayBurst(50, 2.5);
+        T.grab = false; T.extra = 0; squash = 0.32;
+      }
+    } else if (T.float){
+      const c = ctrlAt(stageAt(S.x)), e = envX(S.x) * W.s;
+      surfer.position.set(S.x, c[7] * e + 0.12, W.z + c[6] * W.s);
+      orient(1, 0, 0, 0, 1, 0.15);
+      for (let k = 0; k < 3; k++) emit(spray, S.x - 0.8, surfer.position.y, surfer.position.z + 0.6, -2, 2, 3, 1.2, 0.3, 0.6);
+    } else {
+      surfer.position.set(S.x, S.y, S.z);
+      const upMix = 0.65;
+      orient(S.speed * dirMul, S.vf * 3, -S.vf * 1.5 - cutTurn * S.speed * 0.8, 0, ny * upMix + (1 - upMix), nz * upMix);
+    }
+    if (holding && !S.air && !T.float && !T.cut){
+      if (T.hang === 0 && mode === 'play') toast('행텐!', '노즈 끝까지 걸어가요', false, 700);
+      T.hang += dt; ridePts += 240 * dt; hangX = 0.85;
+    } else if (T.hang > 0){ const p = Math.round(250 + T.hang * 520); ridePts += p; trickToast(`노즈라이딩 ${T.hang.toFixed(1)}초`, p); T.hang = 0; }
+    stand.position.x += (hangX - stand.position.x) * (1 - Math.exp(-dt * 5));
+    // ---- body language: every move has its own pose, blended smoothly ----
+    cheerT = Math.max(0, cheerT - dt); squash *= Math.exp(-dt * 6);
+    T.snapT = Math.max(0, T.snapT - dt); T.turnT = Math.max(0, T.turnT - dt);
+    const pump = S.air || T.float ? 0 : Math.sin(rideT * 7.5) * (0.5 + Math.min(1, Math.abs(S.vf)));
+    const cheer = cheerT > 0 ? Math.sin(Math.min(1, cheerT / 0.9) * Math.PI) : 0;
+    const Q = {
+      cr: 0.04 + pump * 0.045, tw: 0.45 + S.vf * 0.2 + Math.sin(rideT * 1.6) * 0.12,
+      lx: -0.12 + pump * 0.05, lz: -S.vf * 0.22 + Math.sin(rideT * 3.1) * 0.06,
+      fz: 0.45 + S.vf * 0.35 + Math.sin(rideT * 4) * 0.2, bz: -0.35 + S.vf * 0.3 - Math.sin(rideT * 3.4 + 1) * 0.18,
+      fy: Math.sin(rideT * 3.2) * 0.3, by: -Math.sin(rideT * 2.7 + 0.5) * 0.3, hy: 0, hp: 0.1, hop: 0
+    };
+    let lookAhead = 1;
+    if (inBarrel > 0){ Q.cr = 0.3; Q.lx = -0.5; Q.fz = 0.3; Q.fy = 0.4; Q.bz = -1.35 + Math.sin(t * 5) * 0.1; Q.by = 0.9; Q.hp = 0; }
+    if (T.turnT > 0){
+      const k = Math.sin(Math.PI * (1 - T.turnT / 0.5));
+      if (T.turnKind === 'bottom'){ Q.cr = 0.28 * k + 0.04; Q.lx = 0.35 * k - 0.12; Q.bz = -1.4 * k - 0.2; Q.by = 0.8 * k; Q.fz = 0.9; Q.tw += 0.3 * k; Q.hp = -0.15 * k; }
+      else { Q.cr = -0.04; Q.tw += 0.9 * k; Q.fz = 1.7 * k + 0.4; Q.fy = -0.8 * k; Q.bz = -0.9 * k - 0.3; Q.hp = 0.3 * k; }
+    }
+    if (T.cut > 0){
+      const k = clamp(T.cutT / T.cut, 0, 1), s1 = Math.sin(Math.PI * k);
+      Q.cr = 0.22 * s1 + 0.05; Q.tw = 0.45 + 1.5 * s1; Q.lz = 0.45 * Math.sin(2 * Math.PI * k); Q.lx = -0.2 - 0.2 * s1;
+      Q.fz = 0.5 + 1.3 * s1; Q.fy = -1.2 * Math.sin(2 * Math.PI * k); Q.bz = -0.5 - 0.7 * s1; Q.by = 0.6 * s1; lookAhead = 1 - 1.6 * s1;
+    }
+    if (T.snapT > 0){
+      const k = 1 - T.snapT / 0.45, w = Math.sin(Math.PI * k);
+      Q.cr = k < 0.35 ? 0.26 : -0.05; Q.tw = 0.45 - 1.3 * w; Q.fz = 2.1 * w + 0.3; Q.fy = 0.8 * w; Q.bz = -0.4 - 1.1 * w; Q.by = -0.6 * w; Q.lx = -0.25 * w; Q.hop = 0.12 * w; Q.hp = 0.25 * w;
+    }
+    if (S.air){
+      Q.cr = T.grab ? 0.38 : 0.16; Q.tw = 0.45; Q.lx = T.grab ? -0.55 : -0.2; Q.lz = 0;
+      Q.fz = T.grab ? -1.3 : 1.5; Q.fy = T.grab ? 0.3 : 0; Q.bz = T.grab ? -0.5 : -1.5; Q.by = 0; Q.hp = 0.35; lookAhead = 0.5;
+    }
+    if (T.float){ Q.cr = 0.18; Q.fz = 1.25 + Math.sin(t * 7) * 0.2; Q.bz = -1.25 + Math.sin(t * 7 + 1) * 0.2; Q.fy = 0; Q.by = 0; Q.lx = -0.15; Q.lz = Math.sin(t * 5) * 0.12; Q.hp = 0.3; }
+    if (T.hang > 0){
+      Q.cr = -0.03; Q.tw = 1.35; Q.lx = 0.05; Q.lz = 0; Q.fz = 0.25 + Math.sin(t * 5) * 0.15; Q.bz = -0.25 - Math.sin(t * 5) * 0.15; Q.fy = 0.6; Q.by = -0.6; Q.hp = -0.08; lookAhead = 0.3;
+      if (Math.abs(hangX - stand.position.x) > 0.08) Q.hop = Math.abs(Math.sin(t * 14)) * 0.07;
+    }
+    if (cheer > 0.05 && !S.air && T.snapT <= 0){ Q.fz = 2.3; Q.bz = -2.3; Q.fy = 0; Q.by = 0; Q.hop = Math.max(Q.hop, cheer * 0.2); Q.hp = -0.2; }
+    // eyes on the line ahead (board nose), turned slightly toward the camera so the face stays visible
+    Q.hy = (Math.PI / 2 - Q.tw) * 0.85 * lookAhead;
+    const pk = 1 - Math.exp(-dt * 12);
+    for (const k in Q) PO[k] += (Q[k] - PO[k]) * pk;
+    const sq = squash + PO.cr - cheer * 0.05;
+    stand.scale.set(1 + sq * 0.45, 1 - sq, 1 + sq * 0.45);
+    stand.position.y = -Math.abs(S.vf) * 0.05 + PO.hop;
+    stand.rotation.y = Math.PI + PO.tw + (S.air ? Math.sin(S.airT * 9) * 0.1 : 0);
+    torso.rotation.x = PO.lx; torso.rotation.z = PO.lz;
+    armF.rotation.z = PO.fz; armB.rotation.z = PO.bz; armF.rotation.y = PO.fy; armB.rotation.y = PO.by;
+    head.rotation.y = PO.hy; head.rotation.x = -PO.hp;
+
+    // scoring
+    ridePts += S.speed * dt * 6;
+    if (!T.cut && !T.float){
+      if (S.f > 0.88) topArmed = true;
+      if (topArmed && S.vf < -0.3 && S.f < 0.82){ topArmed = false; T.turnT = 0.5; T.turnKind = 'top'; const p = Math.round(S.speed * 28); ridePts += p; if (mode === 'play' && p > 150) toast('탑턴', `+${fmt(p)}`, false, 700); blip(560, 0.1, 'sine', 0.05); for (let k = 0; k < 30; k++) emit(spray, S.x - 0.8, S.y + 0.3, S.z, -2, 5, rand(1, 4), 1.5); }
+      if (S.f < 0.12) botArmed = true;
+      if (botArmed && S.vf > 0.3 && S.f > 0.2){ botArmed = false; T.turnT = 0.5; T.turnKind = 'bottom'; const p = Math.round(S.speed * 16); ridePts += p; if (mode === 'play' && p > 120) toast('바텀턴', `+${fmt(p)}`, false, 700); }
+    }
+    if (dc < 0.5 && S.f < 0.65 && !S.air){
+      if (inBarrel === 0 && mode === 'play') toast('배럴!', '', false, 900);
+      inBarrel += dt; ridePts += 260 * dt;
+    } else if (inBarrel > 0){
+      const p = Math.round(inBarrel * 900); ridePts += p; barrelBest = Math.max(barrelBest, inBarrel); if (mode === 'play') heatStats.barrel = Math.max(heatStats.barrel, inBarrel);
+      cheerT = 1.1;
+      if (mode === 'play') toast('배럴 탈출', `${inBarrel.toFixed(1)}초 · +${fmt(p)}`); blip(820, 0.3, 'triangle', 0.1);
+      inBarrel = 0;
+    }
+    // board spray
+    if (!S.air && !T.float){
+      const sn = Math.floor(S.speed * 0.12 + Math.abs(S.vf) * 4 + (T.cut ? 6 : 0));
+      for (let k = 0; k < sn; k++) emit(spray, S.x - 1.1 * dirMul, S.y + 0.1, S.z, -S.speed * 0.15 * dirMul, 1.5 + Math.abs(S.vf) * 3 + (T.cut ? 3 : 0), 1.5 + S.vf * 2, 0.9, 0.3, 0.7);
+    }
+
+    // end conditions
+    if (!S.air && !T.float){
+      if (dc < -6) wipe('컬 깊숙이 빨려 들어갔어요');
+      else if (dc < 1.2 && S.f > 0.8) wipe('립에 맞았어요');
+      else if (S.speed < 3) { if (mode === 'play') toast('파도에서 떨어졌어요', '속도를 잃었어요', true); endRide('fall'); }
+      else if (rideT > 17){ W.closing = 0; if (mode === 'play') toast('킥아웃', '깔끔하게 마무리', false, 900); endRide('kick'); }
+    }
+  }
+
+  /* ---- after the ride ---- */
+  else if (phase === 'after'){
+    W.closing = Math.min(1, W.closing + dt * 0.25);
+    stand.visible = false; prone.visible = true;
+    S.z += (W.z - 4 * W.s - S.z) * (1 - Math.exp(-dt * 0.8));
+    S.y = surfaceY(S.x, S.z, t);
+    surfer.position.set(S.x, S.y, S.z);
+    paddles[0].rotation.z = Math.sin(t * 3) * 1.1; paddles[1].rotation.z = Math.sin(t * 3 + Math.PI) * 1.1;
+    orient(0, 0, -1, 0, 1, 0);
+    if (phaseT > 3) fadeReset();
+  }
+
+  // shadow
+  const water = phase === 'ride' && !S.air ? S.y : surfaceY(S.x, S.z, t);
+  shadow.position.set(surfer.position.x, water + 0.04, surfer.position.z);
+  shadow.material.opacity = phase === 'ride' ? 0.22 / (1 + S.ah * 0.4) : 0.18;
+
+  // world
+  updateRibbon(camPos.x, t);
+  updateOcean(camPos.x, camPos.z, t);
+  waveFX(dt, camPos.x);
+  stepPool(spray, dt); stepPool(mist, dt);
+  if (rumble){ const d = Math.abs((W.peakX + W.R) - camPos.x); rumble.gain.value = W.breaking ? clamp(0.5 - d / 120, 0, 0.5) : 0; }
+
+  // camera
+  // camera rides with the surfer: position = surfer + smoothed offset, aim = surfer, so they stay centered
+  const portrait = camera.aspect < 1 ? 1.3 : 1, camK = 0.55 + 0.45 * W.s;
+  const sp = surfer.position;
+  anchorY += (sp.y - anchorY) * (1 - Math.exp(-rawDt * 6));
+  let tube = false;
+  if (phase === 'ride'){
+    const dcc = S.x - (W.peakX + W.R);
+    tube = camMode === 'tube' || (camMode === 'auto' && (inBarrel > 0 || (dcc < 3 && S.f < 0.7 && !S.air)));
+    if (tube){
+      // inside the barrel: just ahead of the surfer, tucked under the lip, looking back at their face
+      const ax = S.x + 4.2 * W.s, fp = facePt(ax, 0.42);
+      offT.set(ax - sp.x, fp.y + 0.85 * W.s - anchorY, fp.z + 1.35 * W.s - sp.z);
+      lookT.set(0, 0.8, 0);
+    } else { offT.set(4.6 * camK, 1.3, 9.6 * camK).multiplyScalar(portrait); lookT.set(0, 0.9, 0); }
+  }
+  else if (phase === 'after'){ offT.set(5.5 * camK, 3.0 * camK, 11 * camK).multiplyScalar(portrait); lookT.set(0, 0.7, 0); }
+  else { offT.set(0, 2.2 + 0.8 * (W.s - 1), 7.2 + 2 * (W.s - 1)).multiplyScalar(portrait); lookT.set(0, 1.0 + 0.8 * (W.s - 1), -5); }
+  const ok = 1 - Math.exp(-rawDt * (tube ? 4 : 2.5));
+  camOff.lerp(offT, ok); lookOff.lerp(lookT, ok);
+  camPos.set(sp.x + camOff.x, anchorY + camOff.y, sp.z + camOff.z);
+  look.set(sp.x + lookOff.x, anchorY + lookOff.y + (sp.y - anchorY) * 0.6, sp.z + lookOff.z);
+  const fovT = tube ? 74 : 55;
+  if (Math.abs(camera.fov - fovT) > 0.05){ camera.fov += (fovT - camera.fov) * (1 - Math.exp(-rawDt * 3)); camera.updateProjectionMatrix(); }
+  $('camBtn').classList.toggle('on', tube);
+  camPos.y = Math.max(camPos.y, (tube ? H0(camPos.x, camPos.z, t) : surfaceY(camPos.x, camPos.z, t)) + 1.2);
+  camera.position.copy(camPos);
+  if (inBarrel > 0 && !reduceMotion){ camera.position.x += rand(-0.04, 0.04); camera.position.y += rand(-0.04, 0.04); }
+  camera.lookAt(look);
+  skyGroup.position.set(camPos.x, 0, camPos.z);
+
+  // heat clock & HUD
+  if (mode === 'play'){
+    heatLeft -= rawDt;
+    const tl = Math.max(0, Math.ceil(heatLeft));
+    $('timer').textContent = `${Math.floor(tl/60)}:${String(tl%60).padStart(2,'0')}`;
+    const showMeter = phase === 'lineup';
+    $('meter').hidden = !showMeter; $('ride').hidden = phase !== 'ride'; $('trickBar').hidden = true; $('lipz').classList.toggle('on', phase === 'ride' && S.f > 0.9 && !S.air);
+    if (phase === 'ride'){
+      const lbl = S.air ? ['회전 ↺', '회전 ↻', '그랩'] : ['컷백', '스냅', '에어'];
+      if ($('tbA').textContent !== lbl[2]){ $('tbL').textContent = lbl[0]; $('tbR').textContent = lbl[1]; $('tbA').textContent = lbl[2]; }
+    }
+    if (showMeter){
+      const dz = (S.z - W.z) / W.s;
+      $('mwave').style.left = (pOf(dz) * 94) + '%';
+      $('mwave').style.opacity = dz < TRACK[0] ? 1 : 0.35;
+      $('mmsg').textContent = dz > TRACK[0] ? '드래그로 패들해서 피크로 가요' : dz > WIN[1] ? '준비… 초록 구간에서 탭' : dz >= WIN[0] ? '지금! 탭해서 패들' : '놓치는 중…';
+      const off = S.x - (W.peakX + 3), m = Math.round(Math.abs(off) * 0.92);
+      const peakTxt = m <= 2 ? '피크 위치 좋아요' : off > 0 ? `피크 ← ${m}m` : `피크 → ${m}m`;
+      $('mdist').textContent = dz > TRACK[0] ? `${peakTxt} · 약 ${Math.ceil((dz - WIN[1]) * W.s / W.c)}초` : peakTxt;
+      showHint('');
+    } else if (phase === 'ride'){
+      $('ridePts').textContent = fmt(ridePts);
+      const dc = S.x - (W.peakX + W.R);
+      $('pmark').style.left = clamp((dc + 6) / 30, 0, 1) * 100 + '%';
+      showHint(rideT < 3 ? '화면을 위/아래로 드래그해 페이스를 오르내려요' : rideT < 9 && waves.length < 2 ? '위로 튕기면 스냅·에어 · 옆으로 튕기면 컷백·카빙 · 공중에서 원 그리면 회전' : '');
+    } else showHint('');
+    if (heatLeft <= 0 && phase !== 'ride'){ heatLeft = 0; endHeat(); }
+  }
+  tapQueued = false;
+  if (phase === 'lineup') cooldown -= dt;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+
+let resetting = false;
+function fadeReset(){
+  if (resetting) return; resetting = true;
+  $('fade').style.opacity = 1;
+  setTimeout(() => {
+    newWave();
+    camOff.set(0, 2.2, 7.2); lookOff.set(0, 1.0, -5); anchorY = 0;
+    $('fade').style.opacity = 0; resetting = false;
+  }, 480);
+  phase = 'resetting';
+}
+
+newWave();
+requestAnimationFrame(frame);
+})();
+</script>
+
+</body></html>
