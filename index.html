@@ -86,12 +86,17 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .card-body > *{flex:none}
 .card-body{max-height:calc(100vh - 240px);max-height:calc(100dvh - 240px)}
 #overlay{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}
-.tabs{display:flex;gap:6px;flex:none}
+.tabs{display:flex;gap:5px;flex:none}
 .visits{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--foam-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
 .visits b{color:var(--sun);font-weight:500}
-.tab{flex:1;font-size:13px;font-weight:600;color:var(--foam-dim);background:rgba(234,250,246,.06);border:1px solid var(--line);border-radius:10px;padding:8px 6px}
+.tab{flex:1;min-width:0;white-space:nowrap;font-size:13px;font-weight:600;color:var(--foam-dim);background:rgba(234,250,246,.06);border:1px solid var(--line);border-radius:10px;padding:8px 6px}
 .tab.on{color:var(--ink);background:var(--aqua);border-color:var(--aqua)}
 .card-body section{display:flex;flex-direction:column;gap:10px}
+.info{display:grid;gap:4px;margin:0;font-size:12px;line-height:1.6}
+.info dt{font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--aqua);margin-top:6px}
+.info dt:first-child{margin-top:0}
+.info dd{margin:0;color:var(--foam-dim)}
+.info a{color:var(--foam);text-underline-offset:2px}
 .rec-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .rs{display:flex;flex-direction:column;gap:2px;padding:8px 6px;border-radius:10px;background:rgba(234,250,246,.06);min-width:0}
 .rs .v{font-family:var(--mono);font-size:16px;color:var(--foam);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -221,6 +226,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
       <button type="button" role="tab" class="tab" data-tab="how" aria-selected="false">타는 법</button>
       <button type="button" role="tab" class="tab" data-tab="moves" aria-selected="false">기술</button>
       <button type="button" role="tab" class="tab" data-tab="records" aria-selected="false">기록</button>
+      <button type="button" role="tab" class="tab" data-tab="info" aria-selected="false">정보</button>
     </div>
     <div class="card-body">
       <section data-pane="intro">
@@ -248,6 +254,19 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <div class="rec-sum" id="recSum"></div>
         <div class="rec-list" id="recList"></div>
         <div class="rec-foot"><span class="rec-note">이 기기 브라우저에만 저장돼요</span><button type="button" class="rec-clear" id="recClear">기록 지우기</button></div>
+      </section>
+      <section data-pane="info" hidden>
+        <dl class="info">
+          <dt>개인정보</dt>
+          <dd>이름, 연락처 같은 개인정보는 받지 않아요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
+          <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
+          <dt>사용한 글꼴</dt>
+          <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
+          <dt>3D 엔진</dt>
+          <dd><a href="https://github.com/mrdoob/three.js/blob/dev/LICENSE" target="_blank" rel="noopener">three.js</a> r128 · MIT License · © three.js authors</dd>
+          <dt>그래픽 · 사운드</dt>
+          <dd>파도, 캐릭터, 서핑보드, 효과음은 이 게임을 위해 새로 만들었어요. 외부 이미지, 영상, 녹음 파일, 실제 인물은 쓰지 않았어요.</dd>
+        </dl>
       </section>
     </div>
   </div>
