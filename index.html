@@ -127,7 +127,7 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .hallchip{align-self:flex-start;font-size:11px;font-weight:600;color:var(--sun);border:1px solid rgba(255,210,122,.5);border-radius:999px;padding:2px 9px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hall-note{font-weight:600;color:var(--sun)!important}
 .topchip{align-self:flex-start;font-size:11px;color:var(--ink);background:var(--sun);border-radius:999px;padding:2px 9px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.toprow{margin-top:6px;font-size:11px;color:var(--foam-dim);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.toprow{margin-top:6px;font-size:12px;color:var(--foam);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .toprow b{font-family:var(--mono);font-weight:500;color:var(--sun);margin:0 4px}
 #crew .cm em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--sun);margin-left:6px}
 #crew .cm.lead{color:var(--sun)}
@@ -207,7 +207,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
   <span class="mid" id="timer">2:00</span>
   <span class="label" style="margin-top:6px">베스트 2 웨이브</span>
   <span class="total" id="total">0.00<small>/ 20</small></span>
-  <span class="toprow" id="topLine" data-top hidden></span>
+  <span class="toprow" id="topLine" hidden></span>
 </div>
 <div class="hud tr">
   <span class="label">웨이브 스코어</span>
@@ -255,8 +255,6 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <span class="kicker">Surf metaverse · Heat 2:00</span>
         <h1>선셋 스웰</h1>
         <span class="visits" data-visits hidden></span>
-        <span class="online" data-online hidden></span>
-        <span class="topchip" data-top hidden></span>
         <span class="hallchip" data-hall-top hidden></span>
       </div>
       <div class="head-btns">
@@ -1175,20 +1173,21 @@ function onCrewMsg(id, raw){
 }
 function renderCrewList(){
   const el = $('crew');
-  const show = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed') && crew.size > 0;
+  const show = mode === 'play' && crew.size > 0;
+  const canWatch = !watching && !pZone && (phase === 'lineup' || phase === 'missed');
   el.hidden = !show; if (!show) return;
   const names = [...crew.values()].slice(0, 6);
   const top = topScore();
-  const sig = names.map(c => c.nick + c.ph + Math.max(c.b, c.h)).join('|') + crew.size + (top ? top.n + top.v : '');
+  const sig = names.map(c => c.nick + c.ph + Math.max(c.b, c.h)).join('|') + crew.size + (top ? top.n + top.v : '') + canWatch;
   if (el.dataset.sig === sig) return; el.dataset.sig = sig;
   el.textContent = '';
-  const h = document.createElement('span'); h.className = 'ct'; h.textContent = `라인업 ${crew.size + 1}명`; el.appendChild(h);
+  const h = document.createElement('span'); h.className = 'ct'; h.textContent = `접속 중 ${crew.size + 1}명`; el.appendChild(h);
   for (const c of names){
     const r = document.createElement('span'); r.className = 'cm'; r.textContent = c.nick;
     const cv = Math.max(c.b || 0, c.h || 0); if (cv > 0){ const e2 = document.createElement('em'); e2.textContent = cv.toFixed(2); r.appendChild(e2); }
     if (top && !top.me && top.id === c.id) r.classList.add('lead');
     if (c.ph !== 'lineup'){ const i = document.createElement('i'); i.textContent = c.ph === 'ride' ? '파도 타는 중' : c.ph === 'menu' ? '쉬는 중' : c.ph === 'watch' ? '관전 중' : '돌아오는 중'; r.appendChild(i); }
-    if (c.ph === 'ride' && NET.live){ const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'cw'; bt.textContent = '보기'; bt.addEventListener('click', () => startWatch(c.id)); r.appendChild(bt); }
+    if (c.ph === 'ride' && NET.live && canWatch){ const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'cw'; bt.textContent = '보기'; bt.addEventListener('click', () => startWatch(c.id)); r.appendChild(bt); }
     el.appendChild(r);
   }
   if (crew.size > names.length){ const r = document.createElement('span'); r.className = 'cm'; r.textContent = `외 ${crew.size - names.length}명`; el.appendChild(r); }
@@ -1325,17 +1324,14 @@ function topScore(){
   return top;
 }
 function renderTop(){
-  const top = NET.live ? topScore() : null;
-  document.querySelectorAll('[data-top]').forEach(el => {
-    if (!top){ el.hidden = true; return; }
-    el.hidden = false; el.textContent = '';
-    if (el.id === 'topLine'){
-      el.append('접속자 최고'); const b = document.createElement('b'); b.textContent = top.v.toFixed(2); el.append(b, top.me ? `${top.n} (나)` : top.n);
-    } else el.textContent = `접속자 최고 ${top.v.toFixed(2)} · ${top.me ? top.n + ' (나)' : top.n}`;
-  });
+  const el = $('topLine');
+  if (!NET.live || mode !== 'play'){ el.hidden = true; return; }
+  const top = topScore(), n = crew.size + 1;
+  el.hidden = false; el.textContent = `접속 ${n}명`;
+  if (top){ el.append(' · 최고'); const b = document.createElement('b'); b.textContent = top.v.toFixed(2); el.append(b, top.me ? `${top.n} (나)` : top.n); }
 }
 function renderOnline(){
-  renderTop();
+  renderTop(); renderCrewList();
   document.querySelectorAll('[data-online]').forEach(el => {
     if (!NET.live){ el.hidden = true; return; }
     const n = [...crew.values()].length + (mode === 'play' ? 1 : 0);
