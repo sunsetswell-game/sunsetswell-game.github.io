@@ -87,12 +87,9 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .card-body{max-height:calc(100vh - 240px);max-height:calc(100dvh - 240px)}
 #overlay{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .tabs{display:flex;gap:5px;flex:none}
-.nick-row{display:flex;align-items:center;gap:10px;flex:none;padding:6px 6px 6px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(234,250,246,.05)}
+.nick-row{display:flex;align-items:center;gap:10px;flex:none;padding:6px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(234,250,246,.05)}
 .nick-row span{font-size:12px;font-weight:600;color:var(--aqua);white-space:nowrap}
-.nick-input{flex:1;min-width:0;font:600 15px var(--body);color:var(--foam);background:transparent;border:0;outline:none;padding:4px 2px}
-.nick-input::placeholder{color:var(--foam-dim);font-weight:400}
-.nick-row:focus-within{border-color:var(--aqua)}
-.nick-static{flex:1;font:600 15px var(--body);color:var(--foam)}
+.nick-row .nick-static{flex:1;min-width:0;font:600 15px var(--body);color:var(--foam);letter-spacing:0;padding:4px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #crew{position:fixed;pointer-events:none;top:calc(env(safe-area-inset-top,0px) + 112px);right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:190px;text-shadow:0 1px 8px rgba(11,20,48,.6)}
 #crew .ct{font-size:11px;letter-spacing:.1em;color:var(--foam-dim)}
 #crew .cm{font-size:12px;color:var(--foam);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
@@ -224,7 +221,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <button class="snd" type="button" aria-pressed="true">파도 소리 켬</button>
       </div>
     </div>
-    <label class="nick-row"><span>닉네임</span><input class="nick-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="라인업에 보일 이름"></label>
+    <div class="nick-row"><span>닉네임</span><span class="nick-static"></span></div>
     <div class="tabs" role="tablist">
       <button type="button" role="tab" class="tab on" data-tab="intro" aria-selected="true">소개</button>
       <button type="button" role="tab" class="tab" data-tab="how" aria-selected="false">타는 법</button>
@@ -262,8 +259,8 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
       <section data-pane="info" hidden>
         <dl class="info">
           <dt>개인정보</dt>
-          <dd>이름, 연락처 같은 개인정보는 받지 않아요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
-          <dd>패들 아웃하면 닉네임과 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이니 실명은 쓰지 마세요.</dd>
+          <dd>이름, 연락처 같은 개인정보는 받지 않아요. 닉네임은 무작위로 정해져요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
+          <dd>패들 아웃하면 닉네임과 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이에요.</dd>
           <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
           <dt>사용한 글꼴</dt>
           <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
@@ -903,11 +900,7 @@ function selectTab(name, root = $('card')){
 }
 function wireCard(root = $('card')){
   root.querySelectorAll('.go').forEach(b => b.addEventListener('click', () => { commitNick($('card')); startHeat(); }));
-  root.querySelectorAll('.nick-input').forEach(inp => {
-    inp.value = nick;
-    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter'){ commitNick($('card')); startHeat(); } });
-    inp.addEventListener('keyup', e => e.stopPropagation());
-  });
+  root.querySelectorAll('.nick-static').forEach(el => { el.textContent = nick; });
   root.querySelectorAll('.resume').forEach(b => b.addEventListener('click', () => setPaused(false)));
   root.querySelectorAll('.snd').forEach(b => b.addEventListener('click', () => setSound(!soundOn)));
   root.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab, root)));
@@ -919,20 +912,17 @@ function wireCard(root = $('card')){
   });
 }
 let pauseTab = 'moves';
-let nick = '';
-try { nick = (localStorage.getItem('sunset-swell-nick') || '').slice(0, 10); } catch (_) {}
+const NICK_A = ['노을빛', '반짝이는', '용감한', '느긋한', '재빠른', '수줍은', '신나는', '졸린', '푸른', '말랑한', '씩씩한', '행복한', '배고픈', '춤추는'];
+const NICK_B = ['돌고래', '거북이', '갈매기', '해달', '문어', '고래', '펭귄', '물개', '꽃게', '해파리', '불가사리', '가오리', '조개', '해마'];
 const cleanNick = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 10);
-function commitNick(root){
-  const inp = root && root.querySelector('.nick-input');
-  let v = cleanNick(inp ? inp.value : nick);
-  if (!v) v = '서퍼' + String(Math.floor(100 + Math.random() * 900));
-  nick = v; if (inp) inp.value = v;
-  try { localStorage.setItem('sunset-swell-nick', v); } catch (_) {}
-  setNameTag(myTag, v);
-}
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+let nick = '';
+try { nick = cleanNick(localStorage.getItem('sunset-swell-nick2')); } catch (_) {}
+if (!nick){ nick = `${pick(NICK_A)} ${pick(NICK_B)}`; try { localStorage.setItem('sunset-swell-nick2', nick); } catch (_) {} }
+setNameTag(myTag, nick);
+function commitNick(){ setNameTag(myTag, nick); }
 const startCardHTML = $('card').innerHTML;
 const pauseHTML = () => startCardHTML
-  .replace(/<label class="nick-row">[\s\S]*?<\/label>/, `<div class="nick-row"><span>닉네임</span><span class="nick-static"></span></div>`)
   .replace('<button class="go" type="button">패들 아웃</button>', '<button class="resume" type="button">이어서 타기</button>')
   .replace('Surf metaverse · Heat 2:00', '일시정지 중');
 wireCard();
@@ -971,7 +961,7 @@ function setPaused(on){
   $('trickBtn').textContent = on ? '닫기' : '메뉴';
   setTimeout(netSend, 0);
   if (on){
-    netSend(); const p = $('tricks'); p.innerHTML = pauseHTML(); const ns = p.querySelector('.nick-static'); if (ns) ns.textContent = nick; wireCard(p); setSound(soundOn); selectTab(pauseTab, p);
+    netSend(); const p = $('tricks'); p.innerHTML = pauseHTML(); wireCard(p); setSound(soundOn); selectTab(pauseTab, p);
     if (typeof renderVisits === 'function') renderVisits();
     const r = p.querySelector('.resume'); if (r) r.focus();
   } else $('tricks').innerHTML = '';
@@ -1039,7 +1029,7 @@ function endHeat(){
     <h1>${bt.total.toFixed(2)}</h1>
     <p>${isBest ? '새 최고 히트 점수예요.' : `최고 히트 점수 ${Math.max(b, bt.total).toFixed(2)}`} · 탄 웨이브 ${waves.length}개 · 전체 ${recs.length}개 중 ${rank}위</p>
     <div class="stats">${waves.length ? waves.map(w => `<span class="chip${bt.list.includes(w) ? ' best' : ''}">${w.toFixed(2)}</span>`).join('') : '<span class="chip">잡은 파도가 없어요</span>'}</div>
-    <label class="nick-row"><span>닉네임</span><input class="nick-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="라인업에 보일 이름"></label>
+    <div class="nick-row"><span>닉네임</span><span class="nick-static"></span></div>
     <div class="row"><button class="go" type="button">다시 패들 아웃</button><div class="end-btns"><button class="rec-open" type="button">기록 보기</button></div></div>`;
   wireCard();
   $('overlay').hidden = false;
