@@ -87,6 +87,17 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 .card-body{max-height:calc(100vh - 240px);max-height:calc(100dvh - 240px)}
 #overlay{overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y}
 .tabs{display:flex;gap:5px;flex:none}
+.nick-row{display:flex;align-items:center;gap:10px;flex:none;padding:6px 6px 6px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(234,250,246,.05)}
+.nick-row span{font-size:12px;font-weight:600;color:var(--aqua);white-space:nowrap}
+.nick-input{flex:1;min-width:0;font:600 15px var(--body);color:var(--foam);background:transparent;border:0;outline:none;padding:4px 2px}
+.nick-input::placeholder{color:var(--foam-dim);font-weight:400}
+.nick-row:focus-within{border-color:var(--aqua)}
+.nick-static{flex:1;font:600 15px var(--body);color:var(--foam)}
+#crew{position:fixed;pointer-events:none;top:calc(env(safe-area-inset-top,0px) + 112px);right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;align-items:flex-end;gap:3px;max-width:190px;text-shadow:0 1px 8px rgba(11,20,48,.6)}
+#crew .ct{font-size:11px;letter-spacing:.1em;color:var(--foam-dim)}
+#crew .cm{font-size:12px;color:var(--foam);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
+#crew .cm i{font-style:normal;color:var(--foam-dim);font-size:11px;margin-left:4px}
+.online{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--aqua);border:1px solid rgba(95,224,200,.4);border-radius:999px;padding:2px 9px}
 .visits{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--foam-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
 .visits b{color:var(--sun);font-weight:500}
 .tab{flex:1;min-width:0;white-space:nowrap;font-size:13px;font-weight:600;color:var(--foam-dim);background:rgba(234,250,246,.06);border:1px solid var(--line);border-radius:10px;padding:8px 6px}
@@ -186,6 +197,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
 </div>
 <button id="trickBtn" type="button" hidden aria-expanded="false" aria-controls="tricks">메뉴</button>
 <div id="tricks" class="card" hidden role="dialog" aria-label="게임 메뉴"></div>
+<div id="crew" hidden></div>
 <div id="toast"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
 <div id="fade"></div>
 
@@ -196,12 +208,14 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <span class="kicker">Surf metaverse · Heat 2:00</span>
         <h1>선셋 스웰</h1>
         <span class="visits" data-visits hidden></span>
+        <span class="online" data-online hidden></span>
       </div>
       <div class="head-btns">
         <button class="go" type="button">패들 아웃</button>
         <button class="snd" type="button" aria-pressed="true">파도 소리 켬</button>
       </div>
     </div>
+    <label class="nick-row"><span>닉네임</span><input class="nick-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="라인업에 보일 이름"></label>
     <div class="tabs" role="tablist">
       <button type="button" role="tab" class="tab on" data-tab="intro" aria-selected="true">소개</button>
       <button type="button" role="tab" class="tab" data-tab="how" aria-selected="false">타는 법</button>
@@ -240,6 +254,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <dl class="info">
           <dt>개인정보</dt>
           <dd>이름, 연락처 같은 개인정보는 받지 않아요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
+          <dd>패들 아웃하면 닉네임과 라인업 안의 위치가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이니 실명은 쓰지 마세요.</dd>
           <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
           <dt>사용한 글꼴</dt>
           <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
@@ -254,6 +269,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script>
 (() => {
 const $ = id => document.getElementById(id);
@@ -662,16 +678,65 @@ part(prone, SPH(0.39), skin, 0.58, 0.64, 0);
 part(prone, hairDome(0.41), hair, 0.58, 0.64, 0, 0, 0.45);
 part(prone, SPH(0.1), hair, 0.5, 1.06, 0);
 face(prone, 0.58, 0.64, 0, 1, 0, 0.39);
-for (const s of [-1, 1]){
-  part(prone, new THREE.CylinderGeometry(0.11, 0.12, 0.48, 12), suit, -0.66, 0.3, s*0.15, 0, Math.PI/2);
-  const ft = part(prone, SPH(0.14), cream, -0.94, 0.32, s*0.15); ft.scale.set(0.8, 1, 1.1);
-}
+const kicks = [-1, 1].map(s => {
+  const pv = new THREE.Group(); pv.position.set(-0.42, 0.3, s * 0.15); prone.add(pv);
+  part(pv, new THREE.CylinderGeometry(0.11, 0.12, 0.48, 12), suit, -0.24, 0, 0, 0, Math.PI/2);
+  const ft = part(pv, SPH(0.14), cream, -0.52, 0.02, 0); ft.scale.set(0.8, 1, 1.1);
+  return pv;
+});
 const paddles = [-1, 1].map(side => {
-  const pivot = new THREE.Group(); pivot.position.set(0.3, 0.46, side*0.37); prone.add(pivot);
+  const pivot = new THREE.Group(); pivot.position.set(0.3, 0.46, side*0.37); pivot.rotation.order = 'XZY'; prone.add(pivot);
   part(pivot, new THREE.CylinderGeometry(0.09, 0.1, 0.38, 12), suit, 0, -0.2, 0);
-  part(pivot, SPH(0.12), skin, 0, -0.42, 0);
+  const hand = part(pivot, SPH(0.12), skin, 0, -0.42, 0);
+  pivot.userData = { side, hand, wet: false };
   return pivot;
 });
+// one stroke cycle: reach forward, pull down and back through the water, lift out, recover over the shoulder
+let padPhase = 0, padRate = 2;
+const _hand = new THREE.Vector3();
+function paddleAnim(rate, dt, splash){
+  padRate += (rate - padRate) * (1 - Math.exp(-dt * 3));
+  padPhase += padRate * dt;
+  for (const pv of paddles){
+    const th = Math.PI / 2 - padPhase - (pv.userData.side > 0 ? Math.PI : 0);   // arm angle: +PI/2 forward, 0 straight down, -PI/2 back
+    const up = Math.max(0, -Math.cos(th));                                     // 1 when the arm is above the body (recovery)
+    pv.rotation.set(-pv.userData.side * 0.55 * up, 0, th);                      // swing wide on the way back over
+    const inWater = Math.cos(th) > 0.35;
+    if (splash && inWater && !pv.userData.wet && Math.sin(th) > 0){              // hand entering the water near the nose
+      pv.userData.hand.getWorldPosition(_hand);
+      for (let k = 0; k < 6; k++) emit(spray, _hand.x, _hand.y + 0.05, _hand.z, rand(-0.6, 0.6), 1.6, rand(-0.6, 0.6), 0.5, 0.2, 0.45);
+    }
+    pv.userData.wet = inWater;
+  }
+  const strokes = Math.sin(padPhase);
+  prone.rotation.x = strokes * 0.11 * Math.min(1, padRate / 6);               // shoulders roll with each stroke
+  prone.position.y = Math.abs(Math.cos(padPhase)) * 0.025;
+  kicks[0].rotation.z = Math.sin(padPhase * 2.2) * 0.18 * Math.min(1, padRate / 5);
+  kicks[1].rotation.z = -kicks[0].rotation.z;
+  return strokes;
+}
+function makeNameTag(){
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const tex = new THREE.CanvasTexture(cv);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false }));
+  sp.scale.set(2.4, 0.6, 1); sp.renderOrder = 10; sp.userData = { cv, tex, text: null };
+  return sp;
+}
+function setNameTag(sp, text, mine){
+  if (!sp || sp.userData.text === text) return;
+  sp.userData.text = text;
+  const { cv, tex } = sp.userData, c = cv.getContext('2d');
+  c.clearRect(0, 0, 256, 64);
+  c.font = '600 30px "IBM Plex Sans KR","Apple SD Gothic Neo",sans-serif';
+  const w = Math.min(244, c.measureText(text).width + 34), x = (256 - w) / 2;
+  c.fillStyle = sp.userData.mine ? 'rgba(255,210,122,.95)' : 'rgba(11,20,48,.72)';
+  c.beginPath(); c.roundRect ? c.roundRect(x, 8, w, 48, 24) : c.rect(x, 8, w, 48); c.fill();
+  c.fillStyle = sp.userData.mine ? '#0b1430' : '#eafaf6'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(text, 128, 33, 220);
+  tex.needsUpdate = true;
+}
+const myTag = makeNameTag(); myTag.userData.mine = true; myTag.visible = false; scene.add(myTag);
+
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x06202c, transparent: true, opacity: 0.3, depthWrite: false }));
 shadow.rotation.x = -Math.PI/2; shadow.scale.set(1.6, 0.7, 1); scene.add(shadow);
 
@@ -692,10 +757,10 @@ let inputY = 0, inputX = 0, tapQueued = false;
 const camPos = new THREE.Vector3(0, 3, 8), look = new THREE.Vector3(0, 1, -5);
 const camOff = new THREE.Vector3(0, 2.2, 7.2), lookOff = new THREE.Vector3(0, 1.0, -5);
 const offT = new THREE.Vector3(), lookT = new THREE.Vector3();
-let anchorY = 0, padX = 0, padZ = 0;
+let anchorY = 0, padX = 0, padZ = 0, heading = 0;
 
 function newWave(){
-  S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0;
+  S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0; heading = 0;
   W.z = -95; W.s = rand(1.45, 1.9); W.c = 8.5 * (0.7 + 0.3 * W.s); W.peakX = S.x - 3 + (mode === 'play' ? rand(-14, 14) : rand(-1.5, 1.5)); W.R = -10; W.vp = rand(10.5, 12);
   W.breaking = false; W.preB = 0.05; W.closing = 0;
   phase = 'lineup'; phaseT = 0; autoTapped = false; ridePts = 0; rideT = 0; inBarrel = 0; barrelBest = 0;
@@ -828,7 +893,12 @@ function selectTab(name, root = $('card')){
   if (root.id === 'tricks') pauseTab = name;
 }
 function wireCard(root = $('card')){
-  root.querySelectorAll('.go').forEach(b => b.addEventListener('click', startHeat));
+  root.querySelectorAll('.go').forEach(b => b.addEventListener('click', () => { commitNick($('card')); startHeat(); }));
+  root.querySelectorAll('.nick-input').forEach(inp => {
+    inp.value = nick;
+    inp.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter'){ commitNick($('card')); startHeat(); } });
+    inp.addEventListener('keyup', e => e.stopPropagation());
+  });
   root.querySelectorAll('.resume').forEach(b => b.addEventListener('click', () => setPaused(false)));
   root.querySelectorAll('.snd').forEach(b => b.addEventListener('click', () => setSound(!soundOn)));
   root.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => selectTab(b.dataset.tab, root)));
@@ -840,8 +910,20 @@ function wireCard(root = $('card')){
   });
 }
 let pauseTab = 'moves';
+let nick = '';
+try { nick = (localStorage.getItem('sunset-swell-nick') || '').slice(0, 10); } catch (_) {}
+const cleanNick = v => String(v || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 10);
+function commitNick(root){
+  const inp = root && root.querySelector('.nick-input');
+  let v = cleanNick(inp ? inp.value : nick);
+  if (!v) v = '서퍼' + String(Math.floor(100 + Math.random() * 900));
+  nick = v; if (inp) inp.value = v;
+  try { localStorage.setItem('sunset-swell-nick', v); } catch (_) {}
+  setNameTag(myTag, v);
+}
 const startCardHTML = $('card').innerHTML;
-const pauseHTML = startCardHTML
+const pauseHTML = () => startCardHTML
+  .replace(/<label class="nick-row">[\s\S]*?<\/label>/, `<div class="nick-row"><span>닉네임</span><span class="nick-static"></span></div>`)
   .replace('<button class="go" type="button">패들 아웃</button>', '<button class="resume" type="button">이어서 타기</button>')
   .replace('Surf metaverse · Heat 2:00', '일시정지 중');
 wireCard();
@@ -878,8 +960,9 @@ let paused = false;
 function setPaused(on){
   paused = on; $('tricks').hidden = !on; $('trickBtn').setAttribute('aria-expanded', String(on));
   $('trickBtn').textContent = on ? '닫기' : '메뉴';
+  setTimeout(netSend, 0);
   if (on){
-    const p = $('tricks'); p.innerHTML = pauseHTML; wireCard(p); setSound(soundOn); selectTab(pauseTab, p);
+    netSend(); const p = $('tricks'); p.innerHTML = pauseHTML(); const ns = p.querySelector('.nick-static'); if (ns) ns.textContent = nick; wireCard(p); setSound(soundOn); selectTab(pauseTab, p);
     if (typeof renderVisits === 'function') renderVisits();
     const r = p.querySelector('.resume'); if (r) r.focus();
   } else $('tricks').innerHTML = '';
@@ -926,12 +1009,13 @@ function saveBest(v){ try { localStorage.setItem('sunset-swell-best2', String(v)
 
 function startHeat(){
   initAudio(); if (ac && ac.state === 'suspended') ac.resume();
+  netStart(); setTimeout(netSend, 300);
   mode = 'play'; heatLeft = HEAT; waves = []; renderScores(); heatStats = { tricks: 0, bestTrick: '', bestTrickPts: 0, barrel: 0 };
   $('overlay').hidden = true; $('mute').hidden = false; $('camBtn').hidden = false; $('trickBtn').hidden = false;
   newWave();
 }
 function endHeat(){
-  mode = 'end';
+  mode = 'end'; netLeave(); myTag.visible = false;
   const bt = bestTwo(), b = best(), isBest = bt.total > b && waves.length > 0;
   if (isBest) saveBest(bt.total);
   const recs = loadRecs();
@@ -944,10 +1028,133 @@ function endHeat(){
     <h1>${bt.total.toFixed(2)}</h1>
     <p>${isBest ? '새 최고 히트 점수예요.' : `최고 히트 점수 ${Math.max(b, bt.total).toFixed(2)}`} · 탄 웨이브 ${waves.length}개 · 전체 ${recs.length}개 중 ${rank}위</p>
     <div class="stats">${waves.length ? waves.map(w => `<span class="chip${bt.list.includes(w) ? ' best' : ''}">${w.toFixed(2)}</span>`).join('') : '<span class="chip">잡은 파도가 없어요</span>'}</div>
+    <label class="nick-row"><span>닉네임</span><input class="nick-input" type="text" maxlength="10" autocomplete="off" spellcheck="false" placeholder="라인업에 보일 이름"></label>
     <div class="row"><button class="go" type="button">다시 패들 아웃</button><div class="end-btns"><button class="rec-open" type="button">기록 보기</button></div></div>`;
   wireCard();
   $('overlay').hidden = false;
 }
+
+
+/* ---------- other surfers in the lineup ---------- */
+const crew = new Map();       // id -> { nick, rx, z, ph, seen, g, tag, phase }
+const NET = { id: Math.random().toString(36).slice(2, 10), client: null, live: false, sent: 0 };
+const crewGroup = new THREE.Group(); scene.add(crewGroup);
+const CREW_SLOTS = [[-4, -1.5], [4.5, -2.5], [-7.5, -4.5], [8, -5], [-2, -6.5], [2.5, -8.5], [-11, -7], [11.5, -8]];
+function hashHue(id){ let h = 0; for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
+function makeCrewAvatar(id){
+  const g = new THREE.Group(), hue = hashHue(id);
+  const suitM = new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(hue / 360, 0.55, 0.55) });
+  const boardM = new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(((hue + 160) % 360) / 360, 0.7, 0.72) });
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.5, 20, 10), boardM); b.scale.set(2.8, 0.16, 0.8); b.position.y = 0.05; g.add(b);
+  const add = (geo, m, x, y, z) => { const p = new THREE.Mesh(geo, m); p.position.set(x, y, z); g.add(p); return p; };
+  const bd = add(SPH(0.35), suitM, -0.08, 0.34, 0); bd.scale.set(1.35, 0.72, 1);
+  add(SPH(0.37), skin, 0.56, 0.6, 0);
+  const hd = add(hairDome(0.39), hair, 0.56, 0.6, 0); hd.rotation.z = 0.45;
+  const arms = [-1, 1].map(sd => { const pv = new THREE.Group(); pv.position.set(0.3, 0.44, sd * 0.36); g.add(pv);
+    const a = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.36, 10), suitM); a.position.y = -0.19; pv.add(a);
+    const h = new THREE.Mesh(SPH(0.11), skin); h.position.y = -0.4; pv.add(h); return pv; });
+  const tag = makeNameTag(); scene.add(tag);
+  crewGroup.add(g);
+  return { g, arms, tag, phase: Math.random() * 6, heading: 0, px: null, pz: null };
+}
+function dropCrew(id){ const c = crew.get(id); if (!c) return; if (c.av){ crewGroup.remove(c.av.g); scene.remove(c.av.tag); } crew.delete(id); }
+function onCrewMsg(id, raw){
+  if (id === NET.id) return;
+  if (!raw || !raw.length){ dropCrew(id); return; }
+  let m; try { m = JSON.parse(raw); } catch (_) { return; }
+  if (!m || typeof m !== 'object') return;
+  const name = cleanNick(m.n); if (!name) return;
+  let c = crew.get(id);
+  if (!c){ if (crew.size >= 24) return; c = { av: null }; crew.set(id, c); }
+  c.nick = name; c.rx = clamp(Number(m.rx) || 0, -32, 32); c.z = clamp(Number(m.z) || 0, -8, 6);
+  c.ph = ['lineup', 'ride', 'after', 'menu'].includes(m.ph) ? m.ph : 'lineup'; c.mv = !!m.mv; c.seen = performance.now();
+}
+function renderCrewList(){
+  const el = $('crew');
+  const show = mode === 'play' && (phase === 'lineup' || phase === 'missed') && crew.size > 0;
+  el.hidden = !show; if (!show) return;
+  const names = [...crew.values()].slice(0, 6);
+  const sig = names.map(c => c.nick + c.ph).join('|') + crew.size;
+  if (el.dataset.sig === sig) return; el.dataset.sig = sig;
+  el.textContent = '';
+  const h = document.createElement('span'); h.className = 'ct'; h.textContent = `라인업 ${crew.size + 1}명`; el.appendChild(h);
+  for (const c of names){
+    const r = document.createElement('span'); r.className = 'cm'; r.textContent = c.nick;
+    if (c.ph !== 'lineup'){ const i = document.createElement('i'); i.textContent = c.ph === 'ride' ? '파도 타는 중' : c.ph === 'menu' ? '쉬는 중' : '돌아오는 중'; r.appendChild(i); }
+    el.appendChild(r);
+  }
+  if (crew.size > names.length){ const r = document.createElement('span'); r.className = 'cm'; r.textContent = `외 ${crew.size - names.length}명`; el.appendChild(r); }
+}
+let crewTick = 0;
+function updateCrew(dt){
+  const now = performance.now();
+  for (const [id, c] of crew) if (now - c.seen > 6000) dropCrew(id);
+  const mine = mode === 'play' && (phase === 'lineup' || phase === 'missed');
+  let slot = 0;
+  for (const [id, c] of crew){
+    if (!c.av) c.av = makeCrewAvatar(id);
+    const a = c.av, vis = mine && c.ph === 'lineup';
+    a.g.visible = vis; a.tag.visible = vis;
+    if (!vis) continue;
+    setNameTag(a.tag, c.nick);
+    // everyone waits around the peak (where you're told to paddle); their own paddling nudges them within their spot
+    const sl = CREW_SLOTS[slot % CREW_SLOTS.length], ring = Math.floor(slot / CREW_SLOTS.length);
+    let tx = W.peakX + 3 + sl[0] * (1 + ring * 0.6) + clamp((c.rx - 3) * 0.15, -1.5, 1.5);
+    let tz = sl[1] - ring * 3 + clamp(c.z * 0.3, -1.5, 1.5);
+    if (Math.hypot(tx - S.x, tz - S.z) < 2.6){ tx += sl[0] >= 0 ? 2.6 : -2.6; }
+    slot++;
+    if (a.px == null){ a.px = tx; a.pz = tz; }
+    const k = 1 - Math.exp(-dt * 2.5); const ox = a.px, oz = a.pz;
+    a.px += (tx - a.px) * k; a.pz += (tz - a.pz) * k;
+    const vx = (a.px - ox) / Math.max(dt, 1e-3), vz = (a.pz - oz) / Math.max(dt, 1e-3), sp = Math.hypot(vx, vz);
+    const want = sp > 0.3 ? Math.atan2(vx, vz) : 0;
+    let dh = want - a.heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); a.heading += dh * (1 - Math.exp(-dt * 3));
+    a.phase += dt * (sp > 0.3 || c.mv ? 7.5 : 1.8);
+    a.arms.forEach((pv, i) => { const th = Math.PI / 2 - a.phase - (i ? Math.PI : 0); pv.rotation.set((i ? 1 : -1) * -0.55 * Math.max(0, -Math.cos(th)), 0, th); });
+    const y = surfaceY(a.px, a.pz, t) - 0.05;
+    a.g.position.set(a.px, y, a.pz);
+    a.g.rotation.set(Math.sin(a.phase) * 0.1, a.heading - Math.PI / 2, 0, 'YXZ');
+    a.tag.position.set(a.px, y + 1.75, a.pz);
+  }
+  renderCrewList();
+
+}
+function netState(){
+  return JSON.stringify({ n: nick, rx: +(S.x - W.peakX).toFixed(2), z: +S.z.toFixed(2), mv: Math.abs(padX) + Math.abs(padZ) > 0.15,
+    ph: paused ? 'menu' : phase === 'ride' ? 'ride' : phase === 'lineup' || phase === 'missed' ? 'lineup' : 'after' });
+}
+function netSend(){
+  if (!NET.client || !NET.live || mode !== 'play' || !nick) return;
+  try { NET.client.publish(`${NET_BASE}/p/${NET.id}`, netState(), { qos: 0 }); } catch (_) {}
+}
+function netLeave(){ if (NET.client && NET.live){ try { NET.client.publish(`${NET_BASE}/p/${NET.id}`, '', { qos: 0 }); } catch (_) {} } }
+
+const NET_BASE = 'gca-sunset-swell/v1';
+const NET_URLS = ['wss://broker.hivemq.com:8884/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+function netStart(i = 0){
+  if (NET.client || typeof mqtt === 'undefined' || i >= NET_URLS.length) return;
+  let cl;
+  try {
+    cl = mqtt.connect(NET_URLS[i], { clientId: 'ss-' + NET.id, clean: true, keepalive: 30, reconnectPeriod: 4000, connectTimeout: 8000,
+      will: { topic: `${NET_BASE}/p/${NET.id}`, payload: '', qos: 0, retain: false } });
+  } catch (_) { return netStart(i + 1); }
+  NET.client = cl;
+  let ok = false;
+  const giveUp = setTimeout(() => { if (!ok){ try { cl.end(true); } catch (_) {} NET.client = null; netStart(i + 1); } }, 9000);
+  cl.on('connect', () => { ok = true; clearTimeout(giveUp); NET.live = true; cl.subscribe(`${NET_BASE}/p/+`, { qos: 0 }); netSend(); renderOnline(); });
+  cl.on('close', () => { NET.live = false; renderOnline(); });
+  cl.on('message', (topic, payload) => { const id = topic.split('/').pop(); if (/^[a-z0-9]{4,16}$/.test(id)) onCrewMsg(id, payload.toString().slice(0, 300)); renderOnline(); });
+}
+function renderOnline(){
+  document.querySelectorAll('[data-online]').forEach(el => {
+    if (!NET.live){ el.hidden = true; return; }
+    const n = [...crew.values()].length + (mode === 'play' ? 1 : 0);
+    el.textContent = n > 0 ? `지금 ${n}명 서핑 중` : '지금 접속한 서퍼 없음'; el.hidden = false;
+  });
+}
+window.addEventListener('pagehide', netLeave);
+setInterval(() => { if (!document.hidden) netSend(); }, 1000);
+document.addEventListener('visibilitychange', () => { if (document.hidden) netLeave(); else netSend(); });
 
 /* ---------- phase transitions ---------- */
 function catchWave(dz){
@@ -956,6 +1163,7 @@ function catchWave(dz){
   W.breaking = true; W.R = -10;
   S.f = 0.78; S.speed = perfect ? 11 : 9.5; S.vf = 0; S.air = false;
   Object.assign(T, { cut: 0, cutT: 0, float: false, floatT: 0, hang: 0, grab: false, extra: 0, spinDir: 1, snapT: 0, turnT: 0, turnKind: '', perfect: false }); stand.position.x = 0; squash = 0.35; cheerT = 0; comboN = 0; comboT = 0;
+  prone.rotation.x = 0; prone.position.y = 0;
   ridePts = perfect ? 450 : 180; rideT = 0; inBarrel = 0; topArmed = false; botArmed = false; cooldown = 0.6;
   if (mode === 'play') toast(perfect ? '퍼펙트 테이크오프' : '테이크오프', `+${fmt(ridePts)}`);
   blip(perfect ? 620 : 480, 0.2, 'triangle', 0.1);
@@ -1038,12 +1246,14 @@ function frame(now){
     const sl = surfaceY(S.x, S.z + 0.8, t) - surfaceY(S.x, S.z - 0.8, t);
     stand.visible = false; prone.visible = true;
     const moving = Math.abs(padX) + Math.abs(padZ) > 0.15;
-    const pace = moving ? 10 : phase === 'lineup' && dz < 22 ? 9 : 3;
-    paddles[0].rotation.z = Math.sin(t * pace) * 1.3; paddles[1].rotation.z = Math.sin(t * pace + Math.PI) * 1.3;
-    if (moving && Math.random() < 0.5) emit(spray, S.x, S.y + 0.1, S.z, rand(-0.5,0.5), 1.2, rand(-0.5,0.5), 0.6, 0.2, 0.5);
-    surfer.position.set(S.x, S.y - 0.05, S.z + Math.sin(t * pace) * 0.02);
-    const fz = Math.abs(padZ) > 0.2 ? Math.sign(-padZ) : 1;
-    orient(padX * 0.8, sl * 0.5, fz, 0, 1, -sl * 0.4);
+    const rate = moving ? 7.5 : phase === 'lineup' && dz < 22 ? 8.5 : 1.8;
+    const strokes = paddleAnim(rate, dt, moving || dz < 22);
+    surfer.position.set(S.x, S.y - 0.05, S.z);
+    // turn the board smoothly toward where you paddle (default: nose to the beach, ready for the next wave)
+    const want = moving ? Math.atan2(padX * 0.9, Math.abs(padZ) > 0.2 ? padZ : 0.35) : 0;
+    let dh = want - heading; dh = Math.atan2(Math.sin(dh), Math.cos(dh)); heading += dh * (1 - Math.exp(-dt * 3));
+    orient(Math.sin(heading), sl * 0.5, Math.cos(heading), 0, 1, -sl * 0.4);
+    surfer.position.x += Math.sin(heading) * strokes * 0.015; surfer.position.z += Math.cos(heading) * strokes * 0.015;
 
     if (phase === 'lineup'){
       if (mode !== 'play' && !autoTapped && dz < 3.0){ autoTapped = true; catchWave(dz); }
@@ -1243,10 +1453,15 @@ function frame(now){
     S.z += (W.z - 4 * W.s - S.z) * (1 - Math.exp(-dt * 0.8));
     S.y = surfaceY(S.x, S.z, t);
     surfer.position.set(S.x, S.y, S.z);
-    paddles[0].rotation.z = Math.sin(t * 3) * 1.1; paddles[1].rotation.z = Math.sin(t * 3 + Math.PI) * 1.1;
+    paddleAnim(5, dt, true);
     orient(0, 0, -1, 0, 1, 0);
     if (phaseT > 3) fadeReset();
   }
+
+  // your name tag (lineup only)
+  myTag.visible = mode === 'play' && (phase === 'lineup' || phase === 'missed') && !!nick;
+  if (myTag.visible) myTag.position.set(surfer.position.x, surfer.position.y + 1.9, surfer.position.z);
+  updateCrew(dt);
 
   // shadow
   const water = phase === 'ride' && !S.air ? S.y : surfaceY(S.x, S.z, t);
