@@ -97,6 +97,13 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 #crew .ct{font-size:11px;letter-spacing:.1em;color:var(--foam-dim)}
 #crew .cm{font-size:12px;color:var(--foam);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:190px}
 #crew .cm i{font-style:normal;color:var(--foam-dim);font-size:11px;margin-left:4px}
+#crew .cw{pointer-events:auto;margin-left:6px;font:600 11px var(--body);color:var(--ink);background:var(--aqua);border:0;border-radius:999px;padding:2px 8px;cursor:pointer}
+#watchCall{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 18px);z-index:4;font:600 13px var(--body);color:var(--ink);background:var(--aqua);border:0;border-radius:999px;padding:8px 14px;box-shadow:0 4px 18px rgba(11,20,48,.35);max-width:calc(100% - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
+#watchBar{position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 14px);z-index:4;display:flex;align-items:center;gap:8px;padding:6px 6px 6px 12px;border-radius:999px;background:var(--glass);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border:1px solid var(--line);max-width:calc(100% - 32px);white-space:nowrap}
+#watchBar .wl{font-size:11px;letter-spacing:.08em;color:var(--aqua)}
+#watchBar b{font-size:14px;color:var(--foam);overflow:hidden;text-overflow:ellipsis;max-width:120px}
+#watchPts{font-family:var(--display);font-size:18px;color:var(--sun);font-variant-numeric:tabular-nums}
+#watchBack{font:600 12px var(--body);color:var(--ink);background:var(--sun);border:0;border-radius:999px;padding:6px 10px;cursor:pointer}
 .online{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--aqua);border:1px solid rgba(95,224,200,.4);border-radius:999px;padding:2px 9px}
 .visits{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--foam-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
 .visits b{color:var(--sun);font-weight:500}
@@ -198,6 +205,8 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
 <button id="trickBtn" type="button" hidden aria-expanded="false" aria-controls="tricks">메뉴</button>
 <div id="tricks" class="card" hidden role="dialog" aria-label="게임 메뉴"></div>
 <div id="crew" hidden></div>
+<button id="watchCall" type="button" hidden></button>
+<div id="watchBar" hidden><span class="wl">관전 중</span><b id="watchName"></b><span id="watchPts">0</span><button id="watchBack" type="button">내 자리로</button></div>
 <div id="toast"><div class="t1" id="t1"></div><div class="t2" id="t2"></div></div>
 <div id="fade"></div>
 
@@ -254,7 +263,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <dl class="info">
           <dt>개인정보</dt>
           <dd>이름, 연락처 같은 개인정보는 받지 않아요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
-          <dd>패들 아웃하면 닉네임과 라인업 안의 위치가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이니 실명은 쓰지 마세요.</dd>
+          <dd>패들 아웃하면 닉네임과 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이니 실명은 쓰지 마세요.</dd>
           <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
           <dt>사용한 글꼴</dt>
           <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
@@ -775,7 +784,7 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
   if (mode === 'play' && phase === 'ride' && !e.repeat){ if (e.code === 'ArrowLeft' || e.code === 'KeyA') trickQ = 'left'; if (e.code === 'ArrowRight' || e.code === 'KeyD') trickQ = 'right'; }
   if (e.code === 'KeyC' && mode === 'play') cycleCam();
-  if ((e.code === 'Escape' || e.code === 'KeyP') && mode === 'play'){ setPaused(!paused); e.preventDefault(); }
+  if ((e.code === 'Escape' || e.code === 'KeyP') && mode === 'play'){ if (watching) stopWatch('관전을 마쳤어요'); else setPaused(!paused); e.preventDefault(); }
   if (e.code === 'Enter' && mode !== 'play') startHeat();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
@@ -985,6 +994,7 @@ document.querySelectorAll('.tb').forEach(b => {
 /* ---------- UI ---------- */
 let toastTimer = 0;
 function toast(a, b = '', bad = false, ms = 1100){
+  if (mode === 'play' && phase === 'ride' && !watching){ rideToastSeq++; rideToast = [String(a).slice(0, 24), String(b).slice(0, 30), bad ? 1 : 0]; }
   $('t1').textContent = a; $('t2').textContent = b;
   const el = $('toast'); el.classList.toggle('bad', bad); el.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), ms);
@@ -1015,6 +1025,7 @@ function startHeat(){
   newWave();
 }
 function endHeat(){
+  stopWatch(''); $('watchCall').hidden = true;
   mode = 'end'; netLeave(); myTag.visible = false;
   const bt = bestTwo(), b = best(), isBest = bt.total > b && waves.length > 0;
   if (isBest) saveBest(bt.total);
@@ -1067,11 +1078,13 @@ function onCrewMsg(id, raw){
   let c = crew.get(id);
   if (!c){ if (crew.size >= 24) return; c = { av: null }; crew.set(id, c); }
   c.nick = name; c.rx = clamp(Number(m.rx) || 0, -32, 32); c.z = clamp(Number(m.z) || 0, -8, 6);
-  c.ph = ['lineup', 'ride', 'after', 'menu'].includes(m.ph) ? m.ph : 'lineup'; c.mv = !!m.mv; c.seen = performance.now();
+  const was = c.ph;
+  c.id = id; c.ph = ['lineup', 'ride', 'after', 'menu', 'watch'].includes(m.ph) ? m.ph : 'lineup'; c.mv = !!m.mv; c.seen = performance.now();
+  if (c.ph === 'ride' && was && was !== 'ride') callWatch(c);
 }
 function renderCrewList(){
   const el = $('crew');
-  const show = mode === 'play' && (phase === 'lineup' || phase === 'missed') && crew.size > 0;
+  const show = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed') && crew.size > 0;
   el.hidden = !show; if (!show) return;
   const names = [...crew.values()].slice(0, 6);
   const sig = names.map(c => c.nick + c.ph).join('|') + crew.size;
@@ -1080,7 +1093,8 @@ function renderCrewList(){
   const h = document.createElement('span'); h.className = 'ct'; h.textContent = `라인업 ${crew.size + 1}명`; el.appendChild(h);
   for (const c of names){
     const r = document.createElement('span'); r.className = 'cm'; r.textContent = c.nick;
-    if (c.ph !== 'lineup'){ const i = document.createElement('i'); i.textContent = c.ph === 'ride' ? '파도 타는 중' : c.ph === 'menu' ? '쉬는 중' : '돌아오는 중'; r.appendChild(i); }
+    if (c.ph !== 'lineup'){ const i = document.createElement('i'); i.textContent = c.ph === 'ride' ? '파도 타는 중' : c.ph === 'menu' ? '쉬는 중' : c.ph === 'watch' ? '관전 중' : '돌아오는 중'; r.appendChild(i); }
+    if (c.ph === 'ride' && NET.live){ const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'cw'; bt.textContent = '보기'; bt.addEventListener('click', () => startWatch(c.id)); r.appendChild(bt); }
     el.appendChild(r);
   }
   if (crew.size > names.length){ const r = document.createElement('span'); r.className = 'cm'; r.textContent = `외 ${crew.size - names.length}명`; el.appendChild(r); }
@@ -1089,7 +1103,7 @@ let crewTick = 0;
 function updateCrew(dt){
   const now = performance.now();
   for (const [id, c] of crew) if (now - c.seen > 6000) dropCrew(id);
-  const mine = mode === 'play' && (phase === 'lineup' || phase === 'missed');
+  const mine = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed');
   let slot = 0;
   for (const [id, c] of crew){
     if (!c.av) c.av = makeCrewAvatar(id);
@@ -1121,7 +1135,7 @@ function updateCrew(dt){
 }
 function netState(){
   return JSON.stringify({ n: nick, rx: +(S.x - W.peakX).toFixed(2), z: +S.z.toFixed(2), mv: Math.abs(padX) + Math.abs(padZ) > 0.15,
-    ph: paused ? 'menu' : phase === 'ride' ? 'ride' : phase === 'lineup' || phase === 'missed' ? 'lineup' : 'after' });
+    ph: paused ? 'menu' : watching ? 'watch' : phase === 'ride' ? 'ride' : phase === 'lineup' || phase === 'missed' ? 'lineup' : 'after' });
 }
 function netSend(){
   if (!NET.client || !NET.live || mode !== 'play' || !nick) return;
@@ -1143,7 +1157,9 @@ function netStart(i = 0){
   const giveUp = setTimeout(() => { if (!ok){ try { cl.end(true); } catch (_) {} NET.client = null; netStart(i + 1); } }, 9000);
   cl.on('connect', () => { ok = true; clearTimeout(giveUp); NET.live = true; cl.subscribe(`${NET_BASE}/p/+`, { qos: 0 }); netSend(); renderOnline(); });
   cl.on('close', () => { NET.live = false; renderOnline(); });
-  cl.on('message', (topic, payload) => { const id = topic.split('/').pop(); if (/^[a-z0-9]{4,16}$/.test(id)) onCrewMsg(id, payload.toString().slice(0, 300)); renderOnline(); });
+  cl.on('message', (topic, payload) => { const parts = topic.split('/'), kind = parts[2], id = parts[3]; if (!/^[a-z0-9]{4,16}$/.test(id || '')) return;
+    if (kind === 'p'){ onCrewMsg(id, payload.toString().slice(0, 300)); renderOnline(); }
+    else if (kind === 'r') onRideMsg(id, payload.toString().slice(0, 1500)); });
 }
 function renderOnline(){
   document.querySelectorAll('[data-online]').forEach(el => {
@@ -1155,6 +1171,90 @@ function renderOnline(){
 window.addEventListener('pagehide', netLeave);
 setInterval(() => { if (!document.hidden) netSend(); }, 1000);
 document.addEventListener('visibilitychange', () => { if (document.hidden) netLeave(); else netSend(); });
+
+/* ---------- watch other surfers ride ---------- */
+const watchTag = makeNameTag(); watchTag.visible = false; scene.add(watchTag);
+let watching = null, rideNetT = 0, rideToast = null, rideToastSeq = 0, callTimer = 0;
+const POSE_KEYS = ['c', 'tw', 'lx', 'lz', 'sp', 'aLr', 'aLw', 'aTr', 'aTw', 'hy', 'hp'];
+const r2 = v => Math.round(v * 100) / 100;
+function netRide(extra){
+  if (!NET.client || !NET.live || mode !== 'play' || watching) return;
+  const msg = { n: nick, ws: r2(W.s), wp: r2(W.peakX), wr: r2(W.R), wz: r2(W.z), x: r2(S.x), f: Math.round(S.f * 1000) / 1000, sp: r2(S.speed), vf: r2(S.vf),
+    a: S.air ? 1 : 0, ah: r2(S.ah || 0), sn: r2(S.spin || 0), at: r2(S.airT || 0), fl: T.float ? 1 : 0, hx: r2(stand.position.x), dm: r2(S.dm == null ? 1 : S.dm), ct: r2(S.ct || 0),
+    br: inBarrel > 0 ? 1 : 0, pts: Math.round(ridePts), p: POSE_KEYS.map(k => Math.round(SPR[k].x * 1000) / 1000), tq: rideToastSeq, tt: rideToast, ...(extra || {}) };
+  try { NET.client.publish(`${NET_BASE}/r/${NET.id}`, JSON.stringify(msg), { qos: 0 }); } catch (_) {}
+}
+function callWatch(c){
+  if (mode !== 'play' || watching || !(phase === 'lineup' || phase === 'missed') || !NET.live) return;
+  const el = $('watchCall'); el.textContent = `${c.nick}님이 파도를 잡았어요 · 보기`; el.dataset.id = c.id; el.hidden = false;
+  clearTimeout(callTimer); callTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+$('watchCall').addEventListener('click', () => { $('watchCall').hidden = true; startWatch($('watchCall').dataset.id); });
+$('watchBack').addEventListener('click', () => stopWatch('관전을 마쳤어요'));
+function startWatch(id){
+  const c = crew.get(id);
+  if (!c || c.ph !== 'ride' || !NET.live || mode !== 'play' || watching || paused || !(phase === 'lineup' || phase === 'missed')) return;
+  watching = { id, nick: c.nick, buf: [], lastRecv: performance.now(), tq: null, endAt: 0, pts: 0,
+    saved: { S: { ...S }, W: { ...W }, T: { ...T }, phase, phaseT, inBarrel, heading, padX, padZ, hx: stand.position.x, SPR: JSON.parse(JSON.stringify(SPR)) } };
+  try { NET.client.subscribe(`${NET_BASE}/r/${id}`, { qos: 0 }); } catch (_) {}
+  $('watchCall').hidden = true; $('watchName').textContent = c.nick; $('watchPts').textContent = '0'; $('watchBar').hidden = false;
+  $('meter').hidden = true; $('crew').hidden = true; showHint('');
+  clearPools(); netSend();
+}
+function stopWatch(msg){
+  if (!watching) return;
+  try { NET.client.unsubscribe(`${NET_BASE}/r/${watching.id}`); } catch (_) {}
+  const v = watching.saved;
+  for (const k of Object.keys(S)) if (!(k in v.S)) delete S[k];
+  Object.assign(S, v.S); Object.assign(W, v.W); Object.assign(T, v.T);
+  phase = v.phase; phaseT = v.phaseT; inBarrel = v.inBarrel; heading = v.heading; padX = v.padX; padZ = v.padZ; stand.position.x = v.hx;
+  for (const k in SPR) Object.assign(SPR[k], v.SPR[k]);
+  stand.visible = false; prone.visible = true;
+  watching = null; watchTag.visible = false; $('watchBar').hidden = true; $('crew').dataset.sig = ''; clearPools();
+  if (msg) toast(msg, '내 자리로 돌아왔어요', false, 1100);
+  netSend();
+}
+const num = v => (typeof v === 'number' && isFinite(v)) ? v : 0;
+function onRideMsg(id, raw){
+  if (!watching || id !== watching.id) return;
+  let m; try { m = JSON.parse(raw); } catch (_) { return; }
+  if (!m || typeof m !== 'object' || !Array.isArray(m.p) || m.p.length !== POSE_KEYS.length) return;
+  for (const k of ['ws','wp','wr','wz','x','f','sp','vf','ah','sn','at','hx','dm','ct','pts']) m[k] = num(m[k]);
+  m.p = m.p.map(num); m.ws = clamp(m.ws, 0.5, 3); m.f = clamp(m.f, 0, 1); m.hx = clamp(m.hx, -1, 1.2);
+  const now = performance.now();
+  watching.buf.push({ t: now, m }); if (watching.buf.length > 40) watching.buf.shift();
+  watching.lastRecv = now;
+  if (m.end != null && !watching.endAt){
+    watching.endAt = now + 2600;
+    toast(`${watching.nick} 웨이브 ${num(m.end).toFixed(2)}`, m.kind === 'wipe' ? '와이프아웃' : '라이딩 끝', m.kind === 'wipe', 2200);
+  }
+}
+function watchStep(dt){
+  const w = watching, now = performance.now();
+  if (w.endAt && now > w.endAt){ stopWatch(''); return; }
+  if (now - w.lastRecv > 4000){ stopWatch('연결이 끊겼어요'); return; }
+  if (!w.buf.length){ stand.visible = false; prone.visible = false; return; }
+  const rt = now - 200;
+  let A = w.buf[0], B = A;
+  for (let i = w.buf.length - 1; i >= 0; i--) if (w.buf[i].t <= rt){ A = w.buf[i]; B = w.buf[Math.min(i + 1, w.buf.length - 1)]; break; }
+  const k = B.t > A.t ? clamp((rt - A.t) / (B.t - A.t), 0, 1) : 1;
+  const a = A.m, b = B.m, L = key => a[key] + (b[key] - a[key]) * k;
+  W.s = b.ws; W.peakX = b.wp; W.R = L('wr'); W.z = L('wz'); W.breaking = true; W.closing = 0;
+  S.x = L('x'); S.f = L('f'); S.speed = L('sp'); S.vf = L('vf'); S.air = !!b.a; S.ah = L('ah'); S.spin = b.a ? L('sn') : 0; S.airT = L('at');
+  S.dm = L('dm'); S.ct = L('ct'); T.float = !!b.fl;
+  inBarrel = b.br ? inBarrel + dt : 0;
+  stand.position.x = L('hx');
+  POSE_KEYS.forEach((key, i) => { SPR[key].x = a.p[i] + (b.p[i] - a.p[i]) * k; SPR[key].v = 0; });
+  if (b.tq !== w.tq){ if (w.tq !== null && Array.isArray(b.tt)) toast(String(b.tt[0]).slice(0, 24), String(b.tt[1] || '').slice(0, 30), !!b.tt[2], 900); w.tq = b.tq; }
+  w.pts = b.pts;
+  stand.visible = true; prone.visible = false;
+  placeRider(); applyRiderPose(false);
+  setNameTag(watchTag, w.nick); watchTag.visible = true; watchTag.position.set(surfer.position.x, surfer.position.y + 2.5, surfer.position.z);
+  if (!S.air && !T.float){
+    const dm = S.dm == null ? 1 : S.dm, sn = Math.floor(S.speed * 0.12 + Math.abs(S.vf) * 4);
+    for (let q = 0; q < sn; q++) emit(spray, S.x - 1.1 * dm, S.y + 0.1, S.z, -S.speed * 0.15 * dm, 1.5 + Math.abs(S.vf) * 3, 1.5 + S.vf * 2, 0.9, 0.3, 0.7);
+  }
+}
 
 /* ---------- phase transitions ---------- */
 function catchWave(dz){
@@ -1172,7 +1272,7 @@ function catchWave(dz){
 function endRide(kind){
   const factor = kind === 'wipe' ? 0.65 : 1;
   const sc = toScore(ridePts * factor);
-  if (mode === 'play'){ waves.push(+sc.toFixed(2)); renderScores(); }
+  if (mode === 'play'){ waves.push(+sc.toFixed(2)); renderScores(); netRide({ end: +sc.toFixed(2), kind }); }
   phase = 'after'; phaseT = 0;
   if (kind === 'wipe'){ for (let k = 0; k < 90; k++) emit(spray, S.x, S.y + 0.5, S.z, rand(-2,2), 5, rand(0, 4), 3.5); blip(130, 0.4, 'triangle', 0.16); }
   if (mode === 'play') setTimeout(() => toast(`웨이브 ${sc.toFixed(2)}`, kind === 'wipe' ? '와이프아웃 감점 반영' : `라이딩 ${rideT.toFixed(1)}초`, false, 1600), kind === 'wipe' ? 900 : 0);
@@ -1209,6 +1309,29 @@ function snap(){
   blip(top ? 640 : 500, 0.12, 'sine', 0.07);
 }
 
+function applyRiderPose(walking){
+  const SP = k => SPR[k].x;
+  const cr = clamp(SP('c'), -0.05, 1);
+  legs[0].lift = walking ? Math.max(0, Math.sin(t * 13)) * 0.14 : 0;
+  legs[1].lift = walking ? Math.max(0, -Math.sin(t * 13)) * 0.14 : 0;
+  stand.scale.set(1, 1, 1); stand.position.y = 0;
+  torso.position.set(SP('hx'), 0.64 - 0.36 * cr, 0);
+  torso.rotation.set(SP('lx'), SP('tw') + (S.air ? Math.sin(S.airT * 9) * 0.08 : 0), SP('lz'));
+  aimArm(armLead, SP('aLr'), SP('aLw')); aimArm(armTrail, SP('aTr'), SP('aTw'));
+  head.rotation.set(-SP('hp'), SP('hy'), 0);
+  solveLegs(clamp(SP('sp'), 0.2, 1), 0);
+}
+function placeRider(){
+  const P = facePt(S.x, S.f), pz = P.z, py = P.y;
+  const P2 = facePt(S.x, clamp(S.f + 0.04, 0, 1)), tz = P2.z - pz, ty = P2.y - py;
+  let nz = ty, ny = -tz; const nl = Math.hypot(nz, ny) || 1; nz /= nl; ny /= nl; if (ny < 0){ nz = -nz; ny = -ny; }
+  S.y = py + H0(S.x, pz, t) * 0.5; S.z = pz;
+  const dm = S.dm == null ? 1 : S.dm, ct = S.ct || 0;
+  if (S.air){ surfer.position.set(S.x, S.y + S.ah, S.z - S.ah * 0.35); orient(Math.cos(S.spin), 0.25, -Math.sin(S.spin) * 0.6, 0, 1, 0.3); }
+  else if (T.float){ const c = ctrlAt(stageAt(S.x)), e = envX(S.x) * W.s; surfer.position.set(S.x, c[7] * e + 0.12, W.z + c[6] * W.s); orient(1, 0, 0, 0, 1, 0.15); }
+  else { surfer.position.set(S.x, S.y, S.z); orient(S.speed * dm, S.vf * 3, -S.vf * 1.5 - ct * S.speed * 0.8, 0, ny * 0.65 + 0.35, nz * 0.65); }
+}
+
 /* ---------- loop ---------- */
 let last = performance.now();
 function frame(now){
@@ -1216,7 +1339,7 @@ function frame(now){
   const rawDt = Math.min(0.05, (now - last) / 1000); last = now;
   let ts = 1;
   const dzL = (S.z - W.z) / W.s;
-  if (phase === 'lineup' && mode === 'play' && dzL < 9 && dzL > -1) ts = 0.55;
+  if (!watching && phase === 'lineup' && mode === 'play' && dzL < 9 && dzL > -1) ts = 0.55;
   const dt = rawDt * ts; t += dt; phaseT += dt;
 
   // input
@@ -1228,8 +1351,11 @@ function frame(now){
   if (W.breaking) W.R += W.vp * dt;
   const camX = camPos.x;
 
+  /* ---- watching someone else ---- */
+  if (watching) watchStep(dt);
+
   /* ---- lineup: wait and time the paddle ---- */
-  if (phase === 'lineup' || phase === 'missed'){
+  else if (phase === 'lineup' || phase === 'missed'){
     const dz = (S.z - W.z) / W.s;
     if (phase === 'lineup') W.preB = 0.05 + 0.3 * sstep(60, 3, dz);
     if (phase === 'lineup' && !W.breaking && dz < 0) W.breaking = true;
@@ -1403,17 +1529,9 @@ function frame(now){
       const sp = SPR[key], kk = key === 'hy' || key === 'hp' ? 320 : key[0] === 'a' ? 210 : 150, dd = 2 * 0.7 * Math.sqrt(kk);
       for (let n = 0, h = dt / 2; n < 2; n++){ sp.v += (kk * (Q[key] - sp.x) - dd * sp.v) * h; sp.x += sp.v * h; }
     }
-    const SP = k => SPR[k].x;
-    const cr = clamp(SP('c'), -0.05, 1);
-    legs[0].lift = walking ? Math.max(0, Math.sin(t * 13)) * 0.14 : 0;
-    legs[1].lift = walking ? Math.max(0, -Math.sin(t * 13)) * 0.14 : 0;
-    stand.scale.set(1, 1, 1); stand.position.y = 0;
-    torso.position.set(SP('hx'), 0.64 - 0.36 * cr, 0);
-    torso.rotation.set(SP('lx'), SP('tw') + (S.air ? Math.sin(S.airT * 9) * 0.08 : 0), SP('lz'));
-    aimArm(armLead, SP('aLr'), SP('aLw')); aimArm(armTrail, SP('aTr'), SP('aTw'));
-    head.rotation.set(-SP('hp'), SP('hy'), 0);
-    solveLegs(clamp(SP('sp'), 0.2, 1), 0);
+    applyRiderPose(walking);
 
+    S.dm = dirMul; S.ct = cutTurn;
     // scoring
     ridePts += S.speed * dt * 6;
     if (!T.cut && !T.float){
@@ -1458,15 +1576,18 @@ function frame(now){
     if (phaseT > 3) fadeReset();
   }
 
+  if (phase === 'ride' && !watching){ rideNetT += rawDt; if (rideNetT > 0.1){ rideNetT = 0; netRide(); } }
+
   // your name tag (lineup only)
-  myTag.visible = mode === 'play' && (phase === 'lineup' || phase === 'missed') && !!nick;
+  myTag.visible = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed') && !!nick;
   if (myTag.visible) myTag.position.set(surfer.position.x, surfer.position.y + 1.9, surfer.position.z);
   updateCrew(dt);
 
   // shadow
-  const water = phase === 'ride' && !S.air ? S.y : surfaceY(S.x, S.z, t);
+  const riding = phase === 'ride' || !!watching;
+  const water = riding && !S.air ? S.y : surfaceY(S.x, S.z, t);
   shadow.position.set(surfer.position.x, water + 0.04, surfer.position.z);
-  shadow.material.opacity = phase === 'ride' ? 0.22 / (1 + S.ah * 0.4) : 0.18;
+  shadow.material.opacity = riding ? 0.22 / (1 + S.ah * 0.4) : 0.18;
 
   // world
   updateRibbon(camPos.x, t);
@@ -1481,7 +1602,7 @@ function frame(now){
   const sp = surfer.position;
   anchorY += (sp.y - anchorY) * (1 - Math.exp(-rawDt * 6));
   let tube = false;
-  if (phase === 'ride'){
+  if (phase === 'ride' || watching){
     const dcc = S.x - (W.peakX + W.R);
     tube = camMode === 'tube' || (camMode === 'auto' && (inBarrel > 0 || (dcc < 3 && S.f < 0.7 && !S.air)));
     if (tube){
@@ -1507,7 +1628,10 @@ function frame(now){
   skyGroup.position.set(camPos.x, 0, camPos.z);
 
   // heat clock & HUD
-  if (mode === 'play'){
+  if (mode === 'play' && watching){
+    $('watchPts').textContent = fmt(watching.pts || 0);
+    $('meter').hidden = true; $('ride').hidden = true; $('trickBar').hidden = true;
+  } else if (mode === 'play'){
     heatLeft -= rawDt;
     const tl = Math.max(0, Math.ceil(heatLeft));
     $('timer').textContent = `${Math.floor(tl/60)}:${String(tl%60).padStart(2,'0')}`;
