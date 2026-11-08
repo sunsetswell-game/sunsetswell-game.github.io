@@ -54,6 +54,17 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 
 #meter{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);width:min(420px,calc(100% - 32px));display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .mtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+#paddleMeter{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 22px);width:min(420px,calc(100% - 32px));display:flex;flex-direction:column;gap:6px;pointer-events:none}
+#pmsg{font-size:15px;font-weight:600;color:var(--foam);text-shadow:0 1px 8px rgba(11,20,48,.7)}
+#parr{font-family:var(--mono);font-size:12px;color:var(--sun)}
+.ptk{position:relative;height:18px;border-radius:9px;background:rgba(11,20,48,.55);border:1px solid var(--line);overflow:hidden}
+.pband{position:absolute;top:0;bottom:0;left:55%;width:30%;background:rgba(95,224,200,.3)}
+.pperf{position:absolute;top:0;bottom:0;left:65%;width:12%;background:rgba(95,224,200,.6)}
+#pfill{position:absolute;top:3px;bottom:3px;left:3px;width:0;border-radius:6px;background:var(--sun);opacity:.85;transition:background .15s}
+#pfill.ok{background:var(--aqua)}
+#pfill.over{background:var(--coral)}
+#pneedle{position:absolute;top:-2px;bottom:-2px;width:3px;left:0;background:var(--foam);box-shadow:0 0 8px rgba(234,250,246,.9)}
+.plab{display:flex;justify-content:space-between;font-size:10.5px;color:var(--foam-dim);letter-spacing:.04em}
 #mmsg{font-size:14px;font-weight:600;color:var(--foam);text-shadow:0 1px 8px rgba(11,20,48,.7)}
 #mdist{font-family:var(--mono);font-size:12px;color:var(--foam-dim)}
 .mtrack{position:relative;height:14px;border-radius:7px;background:rgba(11,20,48,.55);border:1px solid var(--line)}
@@ -190,6 +201,11 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
   <div class="pocket"><span>컬</span><div class="ptrack"><i></i><b id="pmark"></b></div><span>숄더</span></div>
 </div>
 
+<div id="paddleMeter" hidden>
+  <div class="mtop"><span id="pmsg">패들! 화면을 연타해요</span><span id="parr"></span></div>
+  <div class="ptk"><div class="pband"></div><div class="pperf"></div><div id="pfill"></div><div id="pneedle"></div></div>
+  <div class="plab"><span>느림</span><span>파도 속도</span><span>너무 빠름</span></div>
+</div>
 <div id="meter" hidden>
   <div class="mtop"><span id="mmsg">세트가 들어와요</span><span id="mdist"></span></div>
   <div class="mtrack"><div class="mzone" id="mzone"></div><div class="mperf" id="mperf"></div><div class="mme"></div><div id="mwave"></div></div>
@@ -242,7 +258,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
       <section data-pane="how" hidden>
         <dl class="steps">
           <dt>1 자리 잡기</dt><dd>드래그로 패들해서 피크(파도가 가장 높은 곳) 쪽으로 가요</dd>
-          <dt>2 테이크오프</dt><dd>초록 구간에서 탭 (Space). 가운데면 퍼펙트</dd>
+          <dt>2 테이크오프</dt><dd>파도가 가까워지면 화면을 연타(Space)해서 패들 속도를 초록 구간에 맞춰요. 진한 초록이면 퍼펙트, 너무 세면 노즈다이브</dd>
           <dt>3 라이딩</dt><dd>위/아래 드래그로 페이스를 오르내려요</dd>
           <dt>4 배럴</dt><dd>속도를 늦춰 컬 안으로 들어가면 보너스</dd>
           <dt>화면 크기</dt><dd>두 손가락으로 벌리거나 오므려요. PC는 마우스 휠, + − 키</dd>
@@ -776,9 +792,21 @@ const camPos = new THREE.Vector3(0, 3, 8), look = new THREE.Vector3(0, 1, -5);
 const camOff = new THREE.Vector3(0, 2.2, 7.2), lookOff = new THREE.Vector3(0, 1.0, -5);
 const offT = new THREE.Vector3(), lookT = new THREE.Vector3();
 let anchorY = 0, padX = 0, padZ = 0, heading = 0;
+// paddling into a wave: each tap is a stroke, power fades between strokes; match the wave's speed when it arrives
+const PZONE = 16, PCATCH = 2.9, PBAND = [0.55, 0.85], PPERF = [0.65, 0.77];
+let pPow = 0, pZone = false, pArmed = false, lastStroke = 0;
+function stroke(){
+  const now = performance.now();
+  if (now - lastStroke < 70) return;            // ignore accidental double-fires
+  lastStroke = now;
+  pPow = Math.min(1, pPow + (1 - pPow) * 0.2);
+  padPhase += 0.6;                               // arms answer the tap right away
+  for (const pv of paddles){ pv.userData.hand.getWorldPosition(_hand); for (let k = 0; k < 5; k++) emit(spray, _hand.x, _hand.y, _hand.z, rand(-0.6, 0.6), 1.8, rand(0.5, 1.5), 0.5, 0.2, 0.45); }
+  blip(240 + pPow * 160, 0.06, 'sine', 0.035);
+}
 
 function newWave(){
-  S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0; heading = 0;
+  S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0; heading = 0; pPow = 0; pZone = false; pArmed = false;
   W.z = -95; W.set = mode === 'play' && Math.random() < 0.18; W.s = W.set ? rand(2.0, 2.3) : rand(1.4, 1.85); W.shoulder = rand(0.36, 0.5); W.seed = rand(0, 6.28); W.c = 8.5 * (0.7 + 0.3 * W.s); W.peakX = S.x - 3 + (mode === 'play' ? rand(-14, 14) : rand(-1.5, 1.5)); W.R = -10; W.vp = rand(10.5, 12);
   W.breaking = false; W.preB = 0.05; W.closing = 0;
   phase = 'lineup'; phaseT = 0; autoTapped = false; ridePts = 0; rideT = 0; inBarrel = 0; barrelBest = 0;
@@ -793,7 +821,8 @@ function newWave(){
 const keys = {};
 window.addEventListener('keydown', e => {
   keys[e.code] = true;
-  if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
+  if (e.code === 'Space' && mode === 'play' && phase === 'lineup' && pZone && !watching){ if (!e.repeat) stroke(); e.preventDefault(); }
+  else if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
   if (mode === 'play' && phase === 'ride' && !e.repeat){ if (e.code === 'ArrowLeft' || e.code === 'KeyA') trickQ = 'left'; if (e.code === 'ArrowRight' || e.code === 'KeyD') trickQ = 'right'; }
   if (e.code === 'KeyC' && mode === 'play') cycleCam();
   if (e.code === 'Equal' || e.code === 'NumpadAdd') setZoom(camZoom / 1.2);
@@ -819,6 +848,7 @@ stage.addEventListener('wheel', e => { e.preventDefault(); setZoom(camZoom * Mat
 const touches = new Map(); let pinch = null;
 const pinchDist = () => { const p = [...touches.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1; };
 stage.addEventListener('pointerdown', e => {
+  if (mode === 'play' && phase === 'lineup' && pZone && !watching){ stroke(); return; }
   touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (touches.size >= 2){ pinch = { d: pinchDist(), z: camZoom }; ptr = null; inputX = 0; inputY = 0; try { stage.setPointerCapture(e.pointerId); } catch (_) {} return; }
   const now0 = performance.now();
@@ -1059,7 +1089,7 @@ function endHeat(){
   recs.unshift({ at: Date.now(), total: +bt.total.toFixed(2), waves: [...waves], tricks: heatStats.tricks, bestTrick: heatStats.bestTrick, barrel: +heatStats.barrel.toFixed(1) });
   saveRecs(recs);
   const rank = [...recs].sort((x, y) => y.total - x.total).findIndex(h => h === recs[0]) + 1;
-  setPaused(false); $('trickBar').hidden = true; holdBtn = false; $('mute').hidden = true; $('camBtn').hidden = true; $('trickBtn').hidden = true; $('zoomBox').hidden = true; $('meter').hidden = true; $('ride').hidden = true; showHint('');
+  setPaused(false); $('paddleMeter').hidden = true; pZone = false; $('trickBar').hidden = true; holdBtn = false; $('mute').hidden = true; $('camBtn').hidden = true; $('trickBtn').hidden = true; $('zoomBox').hidden = true; $('meter').hidden = true; $('ride').hidden = true; showHint('');
   $('card').innerHTML = `
     <span class="kicker">Heat over · Best 2 waves</span>
     <h1>${bt.total.toFixed(2)}</h1>
@@ -1219,7 +1249,7 @@ $('watchCall').addEventListener('click', () => { $('watchCall').hidden = true; s
 $('watchBack').addEventListener('click', () => stopWatch('관전을 마쳤어요'));
 function startWatch(id){
   const c = crew.get(id);
-  if (!c || c.ph !== 'ride' || !NET.live || mode !== 'play' || watching || paused || !(phase === 'lineup' || phase === 'missed')) return;
+  if (!c || c.ph !== 'ride' || !NET.live || mode !== 'play' || watching || paused || pZone || !(phase === 'lineup' || phase === 'missed')) return;
   watching = { id, nick: c.nick, buf: [], lastRecv: performance.now(), tq: null, endAt: 0, pts: 0,
     saved: { S: { ...S }, W: { ...W }, T: { ...T }, phase, phaseT, inBarrel, heading, padX, padZ, hx: stand.position.x, SPR: JSON.parse(JSON.stringify(SPR)) } };
   try { NET.client.subscribe(`${NET_BASE}/r/${id}`, { qos: 0 }); } catch (_) {}
@@ -1283,8 +1313,8 @@ function watchStep(dt){
 }
 
 /* ---------- phase transitions ---------- */
-function catchWave(dz){
-  const perfect = dz >= PERF[0] && dz <= PERF[1];
+function catchWave(dz, perf){
+  const perfect = perf == null ? (dz >= PERF[0] && dz <= PERF[1]) : perf;
   phase = 'ride'; phaseT = 0;
   W.breaking = true; W.R = -10;
   S.f = 0.78; S.speed = perfect ? 11 : 9.5; S.vf = 0; S.air = false;
@@ -1397,8 +1427,12 @@ function frame(now){
     S.y = surfaceY(S.x, S.z, t);
     const sl = surfaceY(S.x, S.z + 0.8, t) - surfaceY(S.x, S.z - 0.8, t);
     stand.visible = false; prone.visible = true;
+    const wasZone = pZone;
+    pZone = mode === 'play' && phase === 'lineup' && dz < PZONE && dz > PCATCH;
+    if (pZone && !wasZone){ pPow = 0; pArmed = true; toast('패들!', '연타해서 파도 속도에 맞춰요', false, 900); }
+    if (pZone){ pPow = Math.max(0, pPow - rawDt * 0.3); S.z = Math.min(12, S.z + pPow * 3.6 * dt); }
     const moving = Math.abs(padX) + Math.abs(padZ) > 0.15;
-    const rate = moving ? 7.5 : phase === 'lineup' && dz < 22 ? 8.5 : 1.8;
+    const rate = pZone ? 1.5 + pPow * 10 : moving ? 7.5 : phase === 'lineup' && dz < 22 ? 4 : 1.8;
     const strokes = paddleAnim(rate, dt, moving || dz < 22);
     surfer.position.set(S.x, S.y - 0.05, S.z);
     // turn the board smoothly toward where you paddle (default: nose to the beach, ready for the next wave)
@@ -1409,12 +1443,16 @@ function frame(now){
 
     if (phase === 'lineup'){
       if (mode !== 'play' && !autoTapped && dz < 3.0){ autoTapped = true; catchWave(dz); }
-      else if (tapQueued && mode === 'play'){
-        if (dz >= WIN[0] && dz <= WIN[1]) catchWave(dz);
-        else if (dz > WIN[1]){ if (cooldown <= 0){ toast('너무 일러요', '파도가 더 가까이 올 때까지', true, 800); cooldown = 0.6; } }
-        else { toast('늦었어요', '립에 밀려났어요', true); phase = 'missed'; phaseT = 0; }
+      else if (mode === 'play' && !pArmed && dz < PCATCH - 3) missWave('파도를 놓쳤어요');
+      else if (mode === 'play'){
+        if (tapQueued && !pZone && cooldown <= 0){ toast('아직 일러요', '파도가 가까워지면 연타해서 저어요', true, 900); cooldown = 0.8; }
+        if (pArmed && dz <= PCATCH){
+          pArmed = false; pZone = false;
+          if (pPow >= PBAND[0] && pPow <= PBAND[1]) catchWave(dz, pPow >= PPERF[0] && pPow <= PPERF[1]);
+          else if (pPow < PBAND[0]) missWave(pPow < 0.2 ? '패들을 안 했어요' : '패들 속도가 모자라요');
+          else { toast('노즈다이브!', '너무 세게 저어서 보드 앞이 박혔어요', true, 1500); for (let k = 0; k < 70; k++) emit(spray, S.x, S.y + 0.4, S.z, rand(-2, 2), 4, rand(1, 4), 3); blip(130, 0.35, 'triangle', 0.15); phase = 'missed'; phaseT = 0; W.breaking = true; W.R = -10; }
+        }
       }
-      if (phase === 'lineup' && dz < WIN[0] - 1.2) missWave('파도를 놓쳤어요');
     } else if (phaseT > 3.2){ fadeReset(); }
   }
 
@@ -1658,13 +1696,21 @@ function frame(now){
 
   // heat clock & HUD
   if (mode === 'play' && watching){
-    $('watchPts').textContent = fmt(watching.pts || 0);
+    $('watchPts').textContent = fmt(watching.pts || 0); $('paddleMeter').hidden = true;
     $('meter').hidden = true; $('ride').hidden = true; $('trickBar').hidden = true;
   } else if (mode === 'play'){
     heatLeft -= rawDt;
     const tl = Math.max(0, Math.ceil(heatLeft));
     $('timer').textContent = `${Math.floor(tl/60)}:${String(tl%60).padStart(2,'0')}`;
-    const showMeter = phase === 'lineup';
+    const showMeter = phase === 'lineup' && !pZone;
+    $('paddleMeter').hidden = !(phase === 'lineup' && pZone);
+    if (pZone){
+      const dzN = (S.z - W.z) / W.s, ok = pPow >= PBAND[0] && pPow <= PBAND[1];
+      $('pfill').style.width = `calc(${(pPow * 100).toFixed(1)}% - 6px)`; $('pneedle').style.left = `calc(${(pPow * 100).toFixed(1)}% - 1px)`;
+      $('pfill').className = ok ? 'ok' : pPow > PBAND[1] ? 'over' : '';
+      $('pmsg').textContent = pPow > PBAND[1] ? '너무 빨라요! 천천히' : pPow >= PPERF[0] && pPow <= PPERF[1] ? '좋아요, 이 속도 유지!' : ok ? '조금만 더 맞춰요' : '패들! 화면을 연타해요';
+      $('parr').textContent = `파도 도착 ${Math.max(0, (dzN - PCATCH) * W.s / W.c / ts).toFixed(1)}초`;
+    }
     $('meter').hidden = !showMeter; $('ride').hidden = phase !== 'ride'; $('trickBar').hidden = true; $('lipz').classList.toggle('on', phase === 'ride' && S.f > 0.9 && !S.air);
     if (phase === 'ride'){
       const lbl = S.air ? ['회전 ↺', '회전 ↻', '그랩'] : ['컷백', '스냅', '에어'];
@@ -1674,7 +1720,7 @@ function frame(now){
       const dz = (S.z - W.z) / W.s;
       $('mwave').style.left = (pOf(dz) * 94) + '%';
       $('mwave').style.opacity = dz < TRACK[0] ? 1 : 0.35;
-      $('mmsg').textContent = dz > TRACK[0] ? '드래그로 패들해서 피크로 가요' : dz > WIN[1] ? '준비… 초록 구간에서 탭' : dz >= WIN[0] ? '지금! 탭해서 패들' : '놓치는 중…';
+      $('mmsg').textContent = dz > TRACK[0] ? '드래그로 패들해서 피크로 가요' : dz > WIN[1] ? '파도가 와요… 곧 패들!' : dz >= WIN[0] ? '지금! 탭해서 패들' : '놓치는 중…';
       const off = S.x - (W.peakX + 3), m = Math.round(Math.abs(off) * 0.92);
       const peakTxt = m <= 2 ? '피크 위치 좋아요' : off > 0 ? `피크 ← ${m}m` : `피크 → ${m}m`;
       $('mdist').textContent = dz > TRACK[0] ? `${peakTxt} · 약 ${Math.ceil((dz - WIN[1]) * W.s / W.c)}초` : peakTxt;
