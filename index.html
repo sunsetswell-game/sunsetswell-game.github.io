@@ -112,6 +112,20 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 #watchBar b{font-size:14px;color:var(--foam);overflow:hidden;text-overflow:ellipsis;max-width:120px}
 #watchPts{font-family:var(--display);font-size:18px;color:var(--sun);font-variant-numeric:tabular-nums}
 #watchBack{font:600 12px var(--body);color:var(--ink);background:var(--sun);border:0;border-radius:999px;padding:6px 10px;cursor:pointer}
+.hall{display:flex;flex-direction:column;gap:6px}
+.hall-h{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--aqua)}
+.mine-h{margin-top:4px}
+.hall-list{display:flex;flex-direction:column;gap:4px}
+.hr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:7px 10px;border-radius:10px;background:rgba(234,250,246,.05)}
+.hr .md{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:600 11px var(--mono);color:#0b1430}
+.hr:nth-child(1) .md{background:#ffd27a}.hr:nth-child(2) .md{background:#d9e2ea}.hr:nth-child(3) .md{background:#e3a476}
+.hr .nm{font-size:14px;font-weight:600;color:var(--foam);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hr .nm small{display:block;font-size:10.5px;font-weight:400;color:var(--foam-dim)}
+.hr .sc{font-family:var(--display);font-size:20px;color:var(--sun);font-variant-numeric:tabular-nums}
+.hr.me{outline:1px solid var(--sun)}
+.hall-empty{font-size:12px;color:var(--foam-dim);padding:4px 0}
+.hallchip{align-self:flex-start;font-size:11px;font-weight:600;color:var(--sun);border:1px solid rgba(255,210,122,.5);border-radius:999px;padding:2px 9px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hall-note{font-weight:600;color:var(--sun)!important}
 .topchip{align-self:flex-start;font-size:11px;color:var(--ink);background:var(--sun);border-radius:999px;padding:2px 9px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .toprow{margin-top:6px;font-size:11px;color:var(--foam-dim);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .toprow b{font-family:var(--mono);font-weight:500;color:var(--sun);margin:0 4px}
@@ -243,6 +257,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <span class="visits" data-visits hidden></span>
         <span class="online" data-online hidden></span>
         <span class="topchip" data-top hidden></span>
+        <span class="hallchip" data-hall-top hidden></span>
       </div>
       <div class="head-btns">
         <button class="go" type="button">패들 아웃</button>
@@ -281,6 +296,8 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         </dl>
       </section>
       <section data-pane="records" hidden>
+        <div class="hall" data-hall hidden><span class="hall-h">명예의 전당 · 역대 TOP 3</span><div class="hall-list"></div></div>
+        <span class="hall-h mine-h">내 기록</span>
         <div class="rec-sum" id="recSum"></div>
         <div class="rec-list" id="recList"></div>
         <div class="rec-foot"><span class="rec-note">이 기기 브라우저에만 저장돼요</span><button type="button" class="rec-clear" id="recClear">기록 지우기</button></div>
@@ -290,6 +307,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
           <dt>개인정보</dt>
           <dd>이름, 연락처 같은 개인정보는 받지 않아요. 닉네임은 무작위로 정해져요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
           <dd>패들 아웃하면 닉네임, 최고 점수, 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이에요.</dd>
+          <dd>히트 점수가 역대 TOP 3에 들면 닉네임, 점수, 날짜가 명예의 전당(Google Firebase)에 저장되고 누구나 볼 수 있어요.</dd>
           <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
           <dt>사용한 글꼴</dt>
           <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
@@ -968,7 +986,7 @@ let clearArm = 0;
 function selectTab(name, root = $('card')){
   root.querySelectorAll('.tab').forEach(b => { const on = b.dataset.tab === name; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on)); });
   root.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
-  if (name === 'records') renderRecords(root);
+  if (name === 'records'){ renderRecords(root); renderHall(); }
   if (root.id === 'tricks') pauseTab = name;
 }
 function wireCard(root = $('card')){
@@ -1101,12 +1119,19 @@ function endHeat(){
   $('card').innerHTML = `
     <span class="kicker">Heat over · Best 2 waves</span>
     <h1>${bt.total.toFixed(2)}</h1>
+    <p class="hall-note" data-hall-note hidden></p>
     <p>${isBest ? '새 최고 히트 점수예요.' : `최고 히트 점수 ${Math.max(b, bt.total).toFixed(2)}`} · 탄 웨이브 ${waves.length}개 · 전체 ${recs.length}개 중 ${rank}위</p>
     <div class="stats">${waves.length ? waves.map(w => `<span class="chip${bt.list.includes(w) ? ' best' : ''}">${w.toFixed(2)}</span>`).join('') : '<span class="chip">잡은 파도가 없어요</span>'}</div>
     <div class="nick-row"><span>닉네임</span><span class="nick-static"></span></div>
     <div class="row"><button class="go" type="button">다시 패들 아웃</button><div class="end-btns"><button class="rec-open" type="button">기록 보기</button></div></div>`;
   wireCard();
   $('overlay').hidden = false;
+  renderHall();
+  if (bt.total > 0) hallSubmit(bt.total, bt.list).then(rank => {
+    if (!rank) return;
+    const n = document.querySelector('#card [data-hall-note]'); if (n){ n.textContent = `명예의 전당 ${rank}위에 올랐어요!`; n.hidden = false; }
+    toast(`명예의 전당 ${rank}위!`, `${bt.total.toFixed(2)}점 · ${nick}`, false, 2600);
+  });
 }
 
 
@@ -1230,6 +1255,66 @@ function netStart(i = 0){
     if (kind === 'p'){ onCrewMsg(id, payload.toString().slice(0, 300)); renderOnline(); }
     else if (kind === 'r') onRideMsg(id, payload.toString().slice(0, 1500)); });
 }
+/* ---------- hall of fame (Firebase Firestore, REST) ---------- */
+const HALL = { projectId: '', apiKey: '' };   // filled in once the Firebase project exists
+let hallTop = null, hallMine = new Set();
+try { hallMine = new Set(JSON.parse(localStorage.getItem('sunset-swell-hall-mine') || '[]')); } catch (_) {}
+const hallOn = () => !!(HALL.projectId && HALL.apiKey);
+const hallUrl = op => `https://firestore.googleapis.com/v1/projects/${HALL.projectId}/databases/(default)/documents${op}?key=${HALL.apiKey}`;
+async function hallLoad(){
+  if (!hallOn()) return;
+  try {
+    const r = await fetch(hallUrl(':runQuery'), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ structuredQuery: { from: [{ collectionId: 'hall' }], orderBy: [{ field: { fieldPath: 'score' }, direction: 'DESCENDING' }], limit: 3 } }) });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    hallTop = (Array.isArray(j) ? j : []).filter(x => x && x.document).map(x => {
+      const f = x.document.fields || {}, id = x.document.name.split('/').pop();
+      return { id, name: cleanNick(f.name && f.name.stringValue) || '이름 없음', score: clamp(Number(f.score && (f.score.doubleValue ?? f.score.integerValue)) || 0, 0, 20), at: f.at && f.at.timestampValue };
+    });
+  } catch (_) { if (!hallTop) hallTop = null; }
+  renderHall();
+}
+async function hallSubmit(score, best2){
+  if (!hallOn() || !(score > 0)) return 0;
+  await hallLoad();
+  const list = hallTop || [];
+  if (list.length >= 3 && score <= list[2].score) return 0;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  try {
+    const r = await fetch(hallUrl(':commit'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ writes: [{
+      update: { name: `projects/${HALL.projectId}/databases/(default)/documents/hall/${id}`,
+        fields: { name: { stringValue: nick }, score: { doubleValue: +score.toFixed(2) }, waves: { arrayValue: { values: best2.map(v => ({ doubleValue: +v.toFixed(2) })) } } } },
+      updateTransforms: [{ fieldPath: 'at', setToServerValue: 'REQUEST_TIME' }], currentDocument: { exists: false } }] }) });
+    if (!r.ok) throw new Error(r.status);
+  } catch (_) { return 0; }
+  hallMine.add(id); try { localStorage.setItem('sunset-swell-hall-mine', JSON.stringify([...hallMine].slice(-20))); } catch (_) {}
+  await hallLoad();
+  const i = (hallTop || []).findIndex(h => h.id === id);
+  return i >= 0 ? i + 1 : 0;
+}
+function renderHall(){
+  const on = hallOn() && Array.isArray(hallTop);
+  document.querySelectorAll('[data-hall]').forEach(box => {
+    box.hidden = !on; if (!on) return;
+    const list = box.querySelector('.hall-list'); list.textContent = '';
+    if (!hallTop.length){ const e = document.createElement('div'); e.className = 'hall-empty'; e.textContent = '아직 기록이 없어요. 첫 1위의 주인공이 되어 보세요.'; list.appendChild(e); return; }
+    hallTop.forEach((h, i) => {
+      const row = document.createElement('div'); row.className = 'hr' + (hallMine.has(h.id) ? ' me' : '');
+      const md = document.createElement('span'); md.className = 'md'; md.textContent = String(i + 1);
+      const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = h.name + (hallMine.has(h.id) ? ' (나)' : '');
+      if (h.at){ const d = new Date(h.at); const sm = document.createElement('small'); sm.textContent = `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`; nm.appendChild(sm); }
+      const sc = document.createElement('span'); sc.className = 'sc'; sc.textContent = h.score.toFixed(2);
+      row.append(md, nm, sc); list.appendChild(row);
+    });
+  });
+  document.querySelectorAll('[data-hall-top]').forEach(el => {
+    const t = on && hallTop[0];
+    el.hidden = !t; if (t) el.textContent = `역대 1위 ${t.score.toFixed(2)} · ${t.name}`;
+  });
+}
+hallLoad(); setInterval(() => { if (!document.hidden && mode !== 'play') hallLoad(); }, 60000);
+
 let bestCache = 0;
 try { bestCache = best(); } catch (_) {}
 function topScore(){
