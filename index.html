@@ -241,7 +241,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
       </section>
       <section data-pane="how" hidden>
         <dl class="steps">
-          <dt>1 자리 잡기</dt><dd>드래그로 패들해서 피크 쪽으로 가요</dd>
+          <dt>1 자리 잡기</dt><dd>드래그로 패들해서 피크(파도가 가장 높은 곳) 쪽으로 가요</dd>
           <dt>2 테이크오프</dt><dd>초록 구간에서 탭 (Space). 가운데면 퍼펙트</dd>
           <dt>3 라이딩</dt><dd>위/아래 드래그로 페이스를 오르내려요</dd>
           <dt>4 배럴</dt><dd>속도를 늦춰 컬 안으로 들어가면 보너스</dd>
@@ -361,8 +361,13 @@ function sampleCtrl(c){
 }
 
 /* ---------- wave state ---------- */
-const W = { z: -95, c: 8.5, s: 0.9, peakX: -3, R: -10, vp: 11, breaking: false, preB: 0.05, closing: 0 };
-function envX(x){ const d = x - W.peakX; return d > 0 ? 1 - 0.45*sstep(100, 170, d) : 1 - 0.45*sstep(70, 140, -d); }
+const W = { shoulder: 0.5, seed: 0, set: false, z: -95, c: 8.5, s: 0.9, peakX: -3, R: -10, vp: 11, breaking: false, preB: 0.05, closing: 0 };
+function envX(x){
+  const d = x - W.peakX, L = d > 0 ? 36 : 22;
+  const shape = W.shoulder + (1 - W.shoulder) * Math.exp(-((d / L) ** 2));
+  const sections = 1 + 0.06 * Math.sin(d * 0.085 + W.seed) * Math.min(1, Math.abs(d) / 25);
+  return shape * sections;
+}
 function stageAt(x){
   let b;
   if (!W.breaking) b = W.preB;
@@ -504,7 +509,7 @@ function updateRibbon(camX, t){
   waterMat.uniforms.time.value = t;
   const x0 = Math.floor((camX - NC*DX/2) / DX) * DX;
   for (let c = 0; c < NC; c++){
-    const x = x0 + c*DX, b = stageAt(x), e = envX(x) * W.s;
+    const x = x0 + c*DX, b = stageAt(x), e = envX(x) * W.s * sstep(0, 14, c) * sstep(NC - 1, NC - 15, c);
     sampleCtrl(ctrlAt(b));
     const foamAll = sstep(0.84, 1, b), lipFoam = sstep(0.5, 0.8, b), pitch = sstep(0.3, 0.75, b) * (1 - foamAll);
     for (let r = 0; r < NR; r++){
@@ -748,6 +753,7 @@ function setNameTag(sp, text, mine){
   tex.needsUpdate = true;
 }
 const myTag = makeNameTag(); myTag.userData.mine = true; myTag.visible = false; scene.add(myTag);
+const peakTag = makeNameTag(); peakTag.visible = false; scene.add(peakTag);
 
 const shadow = new THREE.Mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x06202c, transparent: true, opacity: 0.3, depthWrite: false }));
 shadow.rotation.x = -Math.PI/2; shadow.scale.set(1.6, 0.7, 1); scene.add(shadow);
@@ -773,10 +779,13 @@ let anchorY = 0, padX = 0, padZ = 0, heading = 0;
 
 function newWave(){
   S.x = 0; S.z = 0; S.f = 0.7; S.air = false; S.speed = 9; padX = 0; padZ = 0; heading = 0;
-  W.z = -95; W.s = rand(1.45, 1.9); W.c = 8.5 * (0.7 + 0.3 * W.s); W.peakX = S.x - 3 + (mode === 'play' ? rand(-14, 14) : rand(-1.5, 1.5)); W.R = -10; W.vp = rand(10.5, 12);
+  W.z = -95; W.set = mode === 'play' && Math.random() < 0.18; W.s = W.set ? rand(2.0, 2.3) : rand(1.4, 1.85); W.shoulder = rand(0.36, 0.5); W.seed = rand(0, 6.28); W.c = 8.5 * (0.7 + 0.3 * W.s); W.peakX = S.x - 3 + (mode === 'play' ? rand(-14, 14) : rand(-1.5, 1.5)); W.R = -10; W.vp = rand(10.5, 12);
   W.breaking = false; W.preB = 0.05; W.closing = 0;
   phase = 'lineup'; phaseT = 0; autoTapped = false; ridePts = 0; rideT = 0; inBarrel = 0; barrelBest = 0;
-  $('swell').textContent = `페이스 ${(W.s * 4.4 * 0.92).toFixed(1)}m · 라이트 핸더 · 오프쇼어`;
+  const peakM = W.s * 4.4 * 0.92;
+  $('swell').textContent = `${W.set ? '세트 파도 · ' : ''}피크 ${peakM.toFixed(1)}m · 숄더 ${(peakM * W.shoulder).toFixed(1)}m`;
+  setNameTag(peakTag, `피크 ${peakM.toFixed(1)}m`);
+  if (W.set && mode === 'play') setTimeout(() => { if (phase === 'lineup') toast('세트 파도!', `피크 ${peakM.toFixed(1)}m가 들어와요`, false, 1600); }, 600);
   clearPools();
 }
 
@@ -1196,7 +1205,7 @@ const POSE_KEYS = ['c', 'tw', 'lx', 'lz', 'sp', 'aLr', 'aLw', 'aTr', 'aTw', 'hy'
 const r2 = v => Math.round(v * 100) / 100;
 function netRide(extra){
   if (!NET.client || !NET.live || mode !== 'play' || watching) return;
-  const msg = { n: nick, ws: r2(W.s), wp: r2(W.peakX), wr: r2(W.R), wz: r2(W.z), x: r2(S.x), f: Math.round(S.f * 1000) / 1000, sp: r2(S.speed), vf: r2(S.vf),
+  const msg = { n: nick, ws: r2(W.s), sh: r2(W.shoulder), sd: r2(W.seed), wp: r2(W.peakX), wr: r2(W.R), wz: r2(W.z), x: r2(S.x), f: Math.round(S.f * 1000) / 1000, sp: r2(S.speed), vf: r2(S.vf),
     a: S.air ? 1 : 0, ah: r2(S.ah || 0), sn: r2(S.spin || 0), at: r2(S.airT || 0), fl: T.float ? 1 : 0, hx: r2(stand.position.x), dm: r2(S.dm == null ? 1 : S.dm), ct: r2(S.ct || 0),
     br: inBarrel > 0 ? 1 : 0, pts: Math.round(ridePts), p: POSE_KEYS.map(k => Math.round(SPR[k].x * 1000) / 1000), tq: rideToastSeq, tt: rideToast, ...(extra || {}) };
   try { NET.client.publish(`${NET_BASE}/r/${NET.id}`, JSON.stringify(msg), { qos: 0 }); } catch (_) {}
@@ -1236,7 +1245,7 @@ function onRideMsg(id, raw){
   if (!watching || id !== watching.id) return;
   let m; try { m = JSON.parse(raw); } catch (_) { return; }
   if (!m || typeof m !== 'object' || !Array.isArray(m.p) || m.p.length !== POSE_KEYS.length) return;
-  for (const k of ['ws','wp','wr','wz','x','f','sp','vf','ah','sn','at','hx','dm','ct','pts']) m[k] = num(m[k]);
+  for (const k of ['ws','sh','sd','wp','wr','wz','x','f','sp','vf','ah','sn','at','hx','dm','ct','pts']) m[k] = num(m[k]);
   m.p = m.p.map(num); m.ws = clamp(m.ws, 0.5, 3); m.f = clamp(m.f, 0, 1); m.hx = clamp(m.hx, -1, 1.2);
   const now = performance.now();
   watching.buf.push({ t: now, m }); if (watching.buf.length > 40) watching.buf.shift();
@@ -1256,7 +1265,7 @@ function watchStep(dt){
   for (let i = w.buf.length - 1; i >= 0; i--) if (w.buf[i].t <= rt){ A = w.buf[i]; B = w.buf[Math.min(i + 1, w.buf.length - 1)]; break; }
   const k = B.t > A.t ? clamp((rt - A.t) / (B.t - A.t), 0, 1) : 1;
   const a = A.m, b = B.m, L = key => a[key] + (b[key] - a[key]) * k;
-  W.s = b.ws; W.peakX = b.wp; W.R = L('wr'); W.z = L('wz'); W.breaking = true; W.closing = 0;
+  W.s = b.ws; W.shoulder = clamp(b.sh || 0.5, 0.3, 1); W.seed = b.sd; W.peakX = b.wp; W.R = L('wr'); W.z = L('wz'); W.breaking = true; W.closing = 0;
   S.x = L('x'); S.f = L('f'); S.speed = L('sp'); S.vf = L('vf'); S.air = !!b.a; S.ah = L('ah'); S.spin = b.a ? L('sn') : 0; S.airT = L('at');
   S.dm = L('dm'); S.ct = L('ct'); T.float = !!b.fl;
   inBarrel = b.br ? inBarrel + dt : 0;
@@ -1599,6 +1608,9 @@ function frame(now){
   myTag.visible = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed') && !!nick;
   if (myTag.visible) myTag.position.set(surfer.position.x, surfer.position.y + 1.9, surfer.position.z);
   updateCrew(dt);
+  { const dzP = (S.z - W.z) / W.s;
+    peakTag.visible = mode === 'play' && !watching && phase === 'lineup' && dzP < 70 && dzP > 6;
+    if (peakTag.visible){ const c = ctrlAt(stageAt(W.peakX)); let top = 0; for (let i = 1; i < NP; i++) top = Math.max(top, c[i * 2 + 1]); peakTag.position.set(W.peakX, top * envX(W.peakX) * W.s + 1.3, W.z); } }
 
   // shadow
   const riding = phase === 'ride' || !!watching;
