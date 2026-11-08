@@ -145,6 +145,10 @@ button{font-family:var(--body);cursor:pointer}
 .go:active{transform:translateY(3px);box-shadow:0 1px 0 var(--coral)}
 .snd{font-size:13px;color:var(--foam);background:transparent;border:1px solid var(--line);border-radius:14px;padding:12px 14px}
 button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
+#zoomBox{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 198px);right:max(16px,env(safe-area-inset-right,0px));display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;background:var(--glass);border:1px solid var(--line);z-index:3}
+#zoomBox button{width:30px;height:30px;border-radius:50%;border:0;background:rgba(234,250,246,.1);color:var(--foam);font:600 18px/1 var(--body);cursor:pointer;padding:0}
+#zoomBox button:active{background:var(--aqua);color:var(--ink)}
+#zoomVal{min-width:40px;text-align:center;font-family:var(--mono);font-size:11px;color:var(--foam-dim);font-variant-numeric:tabular-nums}
 #camBtn{position:fixed;pointer-events:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 126px);right:max(16px,env(safe-area-inset-right,0px));font-size:12px;color:var(--foam);background:var(--glass);border:1px solid var(--line);border-radius:999px;padding:5px 10px}
 #camBtn.on{border-color:var(--aqua);color:var(--aqua)}
 #trickBar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);display:flex;gap:10px;z-index:3}
@@ -193,6 +197,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
 <div id="hint" hidden></div>
 <button id="mute" type="button" hidden>소리 켜짐</button>
 <button id="camBtn" type="button" hidden>카메라 · 자동</button>
+<div id="zoomBox" hidden><button type="button" id="zoomOut" aria-label="축소">−</button><span id="zoomVal">100%</span><button type="button" id="zoomIn" aria-label="확대">+</button></div>
 <div id="trickBar" hidden>
   <button type="button" class="tb" data-t="left"><b>↺</b><span id="tbL">컷백</span></button>
   <button type="button" class="tb" data-t="right"><b>✦</b><span id="tbR">스냅</span></button>
@@ -240,6 +245,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
           <dt>2 테이크오프</dt><dd>초록 구간에서 탭 (Space). 가운데면 퍼펙트</dd>
           <dt>3 라이딩</dt><dd>위/아래 드래그로 페이스를 오르내려요</dd>
           <dt>4 배럴</dt><dd>속도를 늦춰 컬 안으로 들어가면 보너스</dd>
+          <dt>화면 크기</dt><dd>두 손가락으로 벌리거나 오므려요. PC는 마우스 휠, + − 키</dd>
         </dl>
       </section>
       <section data-pane="moves" hidden>
@@ -724,8 +730,8 @@ function paddleAnim(rate, dt, splash){
 function makeNameTag(){
   const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
   const tex = new THREE.CanvasTexture(cv);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false }));
-  sp.scale.set(2.4, 0.6, 1); sp.renderOrder = 10; sp.userData = { cv, tex, text: null };
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, fog: false, sizeAttenuation: false }));
+  sp.scale.set(0.2, 0.05, 1); sp.renderOrder = 10; sp.userData = { cv, tex, text: null };
   return sp;
 }
 function setNameTag(sp, text, mine){
@@ -781,18 +787,38 @@ window.addEventListener('keydown', e => {
   if (e.code === 'Space' && mode === 'play'){ tapQueued = true; if (phase === 'ride') trickQ = S.air ? 'tap' : 'up'; e.preventDefault(); }
   if (mode === 'play' && phase === 'ride' && !e.repeat){ if (e.code === 'ArrowLeft' || e.code === 'KeyA') trickQ = 'left'; if (e.code === 'ArrowRight' || e.code === 'KeyD') trickQ = 'right'; }
   if (e.code === 'KeyC' && mode === 'play') cycleCam();
+  if (e.code === 'Equal' || e.code === 'NumpadAdd') setZoom(camZoom / 1.2);
+  if (e.code === 'Minus' || e.code === 'NumpadSubtract') setZoom(camZoom * 1.2);
   if ((e.code === 'Escape' || e.code === 'KeyP') && mode === 'play'){ if (watching) stopWatch('관전을 마쳤어요'); else setPaused(!paused); e.preventDefault(); }
   if (e.code === 'Enter' && mode !== 'play') startHeat();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 let ptr = null;
 const stage = $('stage');
+// camera zoom: 1 = default framing; bigger = farther away (zoomed out)
+let camZoom = 1;
+try { camZoom = clamp(+localStorage.getItem('sunset-swell-zoom') || 1, 0.5, 2.2); } catch (_) {}
+function setZoom(z){
+  camZoom = clamp(z, 0.5, 2.2);
+  $('zoomVal').textContent = Math.round(100 / camZoom) + '%';
+  try { localStorage.setItem('sunset-swell-zoom', camZoom.toFixed(3)); } catch (_) {}
+}
+setZoom(camZoom);
+$('zoomIn').addEventListener('click', () => setZoom(camZoom / 1.2));
+$('zoomOut').addEventListener('click', () => setZoom(camZoom * 1.2));
+stage.addEventListener('wheel', e => { e.preventDefault(); setZoom(camZoom * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
+const touches = new Map(); let pinch = null;
+const pinchDist = () => { const p = [...touches.values()]; return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1; };
 stage.addEventListener('pointerdown', e => {
+  touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (touches.size >= 2){ pinch = { d: pinchDist(), z: camZoom }; ptr = null; inputX = 0; inputY = 0; try { stage.setPointerCapture(e.pointerId); } catch (_) {} return; }
   const now0 = performance.now();
   ptr = { id: e.pointerId, x: e.clientX, y: e.clientY, t: now0, ay: e.clientY, hist: [{ x: e.clientX, y: e.clientY, t: now0 }], lastFlick: 0, px: e.clientX, py: e.clientY, mv: null, turn: 0 };
   try { stage.setPointerCapture(e.pointerId); } catch (_) {}
 });
 stage.addEventListener('pointermove', e => {
+  if (touches.has(e.pointerId)) touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && touches.size >= 2){ setZoom(pinch.z * pinch.d / pinchDist()); return; }
   if (!ptr || e.pointerId !== ptr.id) return;
   const now = performance.now();
   const dx = e.clientX - ptr.x, dy = e.clientY - ptr.y;
@@ -822,6 +848,7 @@ function gesture(x, y, now){
   else if (Math.abs(vx) > 0.9 && Math.abs(vx) > Math.abs(vy) * 1.2){ trickQ = vx < 0 ? 'left' : 'right'; ptr.lastFlick = now; ptr.ay = y; }
 }
 function endPtr(e){
+  touches.delete(e.pointerId); if (touches.size < 2) pinch = null;
   if (!ptr || e.pointerId !== ptr.id) return;
   const quick = performance.now() - ptr.t < 260 && Math.abs(e.clientX - ptr.x) < 14 && Math.abs(e.clientY - ptr.y) < 14;
   if (quick && mode === 'play' && phase === 'lineup') tapQueued = true;
@@ -1011,7 +1038,7 @@ function startHeat(){
   initAudio(); if (ac && ac.state === 'suspended') ac.resume();
   netStart(); setTimeout(netSend, 300);
   mode = 'play'; heatLeft = HEAT; waves = []; renderScores(); heatStats = { tricks: 0, bestTrick: '', bestTrickPts: 0, barrel: 0 };
-  $('overlay').hidden = true; $('mute').hidden = false; $('camBtn').hidden = false; $('trickBtn').hidden = false;
+  $('overlay').hidden = true; $('mute').hidden = false; $('camBtn').hidden = false; $('trickBtn').hidden = false; $('zoomBox').hidden = false;
   newWave();
 }
 function endHeat(){
@@ -1023,7 +1050,7 @@ function endHeat(){
   recs.unshift({ at: Date.now(), total: +bt.total.toFixed(2), waves: [...waves], tricks: heatStats.tricks, bestTrick: heatStats.bestTrick, barrel: +heatStats.barrel.toFixed(1) });
   saveRecs(recs);
   const rank = [...recs].sort((x, y) => y.total - x.total).findIndex(h => h === recs[0]) + 1;
-  setPaused(false); $('trickBar').hidden = true; holdBtn = false; $('mute').hidden = true; $('camBtn').hidden = true; $('trickBtn').hidden = true; $('meter').hidden = true; $('ride').hidden = true; showHint('');
+  setPaused(false); $('trickBar').hidden = true; holdBtn = false; $('mute').hidden = true; $('camBtn').hidden = true; $('trickBtn').hidden = true; $('zoomBox').hidden = true; $('meter').hidden = true; $('ride').hidden = true; showHint('');
   $('card').innerHTML = `
     <span class="kicker">Heat over · Best 2 waves</span>
     <h1>${bt.total.toFixed(2)}</h1>
@@ -1600,10 +1627,10 @@ function frame(now){
       const ax = S.x + 4.2 * W.s, fp = facePt(ax, 0.42);
       offT.set(ax - sp.x, fp.y + 0.85 * W.s - anchorY, fp.z + 1.35 * W.s - sp.z);
       lookT.set(0, 0.8, 0);
-    } else { offT.set(4.6 * camK, 1.3, 9.6 * camK).multiplyScalar(portrait); lookT.set(0, 0.9, 0); }
+    } else { offT.set(4.6 * camK, 1.3 + 1.2 * (camZoom - 1), 9.6 * camK).multiplyScalar(portrait * camZoom); lookT.set(0, 0.9, 0); }
   }
-  else if (phase === 'after'){ offT.set(5.5 * camK, 3.0 * camK, 11 * camK).multiplyScalar(portrait); lookT.set(0, 0.7, 0); }
-  else { offT.set(0, 2.2 + 0.8 * (W.s - 1), 7.2 + 2 * (W.s - 1)).multiplyScalar(portrait); lookT.set(0, 1.0 + 0.8 * (W.s - 1), -5); }
+  else if (phase === 'after'){ offT.set(5.5 * camK, 3.0 * camK, 11 * camK).multiplyScalar(portrait * camZoom); lookT.set(0, 0.7, 0); }
+  else { offT.set(0, 2.2 + 0.8 * (W.s - 1), 7.2 + 2 * (W.s - 1)).multiplyScalar(portrait * camZoom); lookT.set(0, 1.0 + 0.8 * (W.s - 1), -5); }
   const ok = 1 - Math.exp(-rawDt * (tube ? 4 : 2.5));
   camOff.lerp(offT, ok); lookOff.lerp(lookT, ok);
   camPos.set(sp.x + camOff.x, anchorY + camOff.y, sp.z + camOff.z);
