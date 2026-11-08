@@ -112,6 +112,11 @@ body{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px
 #watchBar b{font-size:14px;color:var(--foam);overflow:hidden;text-overflow:ellipsis;max-width:120px}
 #watchPts{font-family:var(--display);font-size:18px;color:var(--sun);font-variant-numeric:tabular-nums}
 #watchBack{font:600 12px var(--body);color:var(--ink);background:var(--sun);border:0;border-radius:999px;padding:6px 10px;cursor:pointer}
+.topchip{align-self:flex-start;font-size:11px;color:var(--ink);background:var(--sun);border-radius:999px;padding:2px 9px;font-weight:600;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.toprow{margin-top:6px;font-size:11px;color:var(--foam-dim);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
+.toprow b{font-family:var(--mono);font-weight:500;color:var(--sun);margin:0 4px}
+#crew .cm em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--sun);margin-left:6px}
+#crew .cm.lead{color:var(--sun)}
 .online{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--aqua);border:1px solid rgba(95,224,200,.4);border-radius:999px;padding:2px 9px}
 .visits{align-self:flex-start;font-family:var(--mono);font-size:11px;color:var(--foam-dim);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-variant-numeric:tabular-nums}
 .visits b{color:var(--sun);font-weight:500}
@@ -188,6 +193,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
   <span class="mid" id="timer">2:00</span>
   <span class="label" style="margin-top:6px">베스트 2 웨이브</span>
   <span class="total" id="total">0.00<small>/ 20</small></span>
+  <span class="toprow" id="topLine" data-top hidden></span>
 </div>
 <div class="hud tr">
   <span class="label">웨이브 스코어</span>
@@ -236,6 +242,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <h1>선셋 스웰</h1>
         <span class="visits" data-visits hidden></span>
         <span class="online" data-online hidden></span>
+        <span class="topchip" data-top hidden></span>
       </div>
       <div class="head-btns">
         <button class="go" type="button">패들 아웃</button>
@@ -282,7 +289,7 @@ button:focus-visible{outline:2px solid var(--foam);outline-offset:3px}
         <dl class="info">
           <dt>개인정보</dt>
           <dd>이름, 연락처 같은 개인정보는 받지 않아요. 닉네임은 무작위로 정해져요. 점수 기록은 지금 쓰는 기기의 브라우저에만 저장되고, 다른 곳으로 보내지 않아요.</dd>
-          <dd>패들 아웃하면 닉네임과 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이에요.</dd>
+          <dd>패들 아웃하면 닉네임, 최고 점수, 라인업 안의 위치, 파도를 탈 때의 움직임과 점수가 공개 실시간 중계 서버(HiveMQ 공개 브로커)를 거쳐 지금 접속한 다른 사람에게 보여요. 저장되지 않고, 누구나 볼 수 있는 공개 채널이에요.</dd>
           <dd>누적 방문자 수를 세려고 처음 접속할 때 한 번 외부 카운터 서비스(Abacus)에 접속 신호를 보내요. 이때 접속 IP 주소가 그 서비스에 전달될 수 있어요.</dd>
           <dt>사용한 글꼴</dt>
           <dd>Bagel Fat One, IBM Plex Sans KR, IBM Plex Mono · Google Fonts 제공 · <a href="https://openfontlicense.org" target="_blank" rel="noopener">SIL Open Font License 1.1</a></dd>
@@ -1085,6 +1092,7 @@ function endHeat(){
   mode = 'end'; netLeave(); myTag.visible = false;
   const bt = bestTwo(), b = best(), isBest = bt.total > b && waves.length > 0;
   if (isBest) saveBest(bt.total);
+  bestCache = Math.max(bestCache, bt.total);
   const recs = loadRecs();
   recs.unshift({ at: Date.now(), total: +bt.total.toFixed(2), waves: [...waves], tricks: heatStats.tricks, bestTrick: heatStats.bestTrick, barrel: +heatStats.barrel.toFixed(1) });
   saveRecs(recs);
@@ -1133,6 +1141,8 @@ function onCrewMsg(id, raw){
   const name = cleanNick(m.n); if (!name) return;
   let c = crew.get(id);
   if (!c){ if (crew.size >= 24) return; c = { av: null }; crew.set(id, c); }
+  const sc = v => { v = Number(v); return isFinite(v) ? clamp(v, 0, 20) : 0; };
+  c.b = sc(m.b); c.h = sc(m.h);
   c.nick = name; c.rx = clamp(Number(m.rx) || 0, -32, 32); c.z = clamp(Number(m.z) || 0, -8, 6);
   const was = c.ph;
   c.id = id; c.ph = ['lineup', 'ride', 'after', 'menu', 'watch'].includes(m.ph) ? m.ph : 'lineup'; c.mv = !!m.mv; c.seen = performance.now();
@@ -1143,12 +1153,15 @@ function renderCrewList(){
   const show = mode === 'play' && !watching && (phase === 'lineup' || phase === 'missed') && crew.size > 0;
   el.hidden = !show; if (!show) return;
   const names = [...crew.values()].slice(0, 6);
-  const sig = names.map(c => c.nick + c.ph).join('|') + crew.size;
+  const top = topScore();
+  const sig = names.map(c => c.nick + c.ph + Math.max(c.b, c.h)).join('|') + crew.size + (top ? top.n + top.v : '');
   if (el.dataset.sig === sig) return; el.dataset.sig = sig;
   el.textContent = '';
   const h = document.createElement('span'); h.className = 'ct'; h.textContent = `라인업 ${crew.size + 1}명`; el.appendChild(h);
   for (const c of names){
     const r = document.createElement('span'); r.className = 'cm'; r.textContent = c.nick;
+    const cv = Math.max(c.b || 0, c.h || 0); if (cv > 0){ const e2 = document.createElement('em'); e2.textContent = cv.toFixed(2); r.appendChild(e2); }
+    if (top && !top.me && top.id === c.id) r.classList.add('lead');
     if (c.ph !== 'lineup'){ const i = document.createElement('i'); i.textContent = c.ph === 'ride' ? '파도 타는 중' : c.ph === 'menu' ? '쉬는 중' : c.ph === 'watch' ? '관전 중' : '돌아오는 중'; r.appendChild(i); }
     if (c.ph === 'ride' && NET.live){ const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'cw'; bt.textContent = '보기'; bt.addEventListener('click', () => startWatch(c.id)); r.appendChild(bt); }
     el.appendChild(r);
@@ -1190,7 +1203,7 @@ function updateCrew(dt){
 
 }
 function netState(){
-  return JSON.stringify({ n: nick, rx: +(S.x - W.peakX).toFixed(2), z: +S.z.toFixed(2), mv: Math.abs(padX) + Math.abs(padZ) > 0.15,
+  return JSON.stringify({ n: nick, b: +bestCache.toFixed(2), h: +(mode === 'play' ? bestTwo().total : 0).toFixed(2), rx: +(S.x - W.peakX).toFixed(2), z: +S.z.toFixed(2), mv: Math.abs(padX) + Math.abs(padZ) > 0.15,
     ph: paused ? 'menu' : watching ? 'watch' : phase === 'ride' ? 'ride' : phase === 'lineup' || phase === 'missed' ? 'lineup' : 'after' });
 }
 function netSend(){
@@ -1217,7 +1230,27 @@ function netStart(i = 0){
     if (kind === 'p'){ onCrewMsg(id, payload.toString().slice(0, 300)); renderOnline(); }
     else if (kind === 'r') onRideMsg(id, payload.toString().slice(0, 1500)); });
 }
+let bestCache = 0;
+try { bestCache = best(); } catch (_) {}
+function topScore(){
+  let top = null;
+  const mine = Math.max(bestCache, mode === 'play' ? bestTwo().total : 0);
+  if (mine > 0) top = { n: nick, v: mine, me: true };
+  for (const c of crew.values()){ const v = Math.max(c.b || 0, c.h || 0); if (v > 0 && (!top || v > top.v)) top = { n: c.nick, v, me: false, id: c.id }; }
+  return top;
+}
+function renderTop(){
+  const top = NET.live ? topScore() : null;
+  document.querySelectorAll('[data-top]').forEach(el => {
+    if (!top){ el.hidden = true; return; }
+    el.hidden = false; el.textContent = '';
+    if (el.id === 'topLine'){
+      el.append('접속자 최고'); const b = document.createElement('b'); b.textContent = top.v.toFixed(2); el.append(b, top.me ? `${top.n} (나)` : top.n);
+    } else el.textContent = `접속자 최고 ${top.v.toFixed(2)} · ${top.me ? top.n + ' (나)' : top.n}`;
+  });
+}
 function renderOnline(){
+  renderTop();
   document.querySelectorAll('[data-online]').forEach(el => {
     if (!NET.live){ el.hidden = true; return; }
     const n = [...crew.values()].length + (mode === 'play' ? 1 : 0);
@@ -1225,7 +1258,8 @@ function renderOnline(){
   });
 }
 window.addEventListener('pagehide', netLeave);
-setInterval(() => { if (!document.hidden) netSend(); }, 1000);
+setInterval(() => { if (!document.hidden) netSend(); renderTop(); }, 1000);
+netStart(); // listen from the start screen so the online count and top score show before you paddle out
 document.addEventListener('visibilitychange', () => { if (document.hidden) netLeave(); else netSend(); });
 
 /* ---------- watch other surfers ride ---------- */
