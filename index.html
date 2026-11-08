@@ -612,27 +612,49 @@ function face(g, cx, cy, cz, dx, dz, r){
 const hairDome = r => new THREE.SphereGeometry(r, 22, 12, 0, Math.PI*2, 0, Math.PI*0.5);
 
 const stand = new THREE.Group(); surfer.add(stand);
-for (const s of [-1, 1]){
-  const ft = part(stand, SPH(0.15), cream, s*0.42, 0.14, 0); ft.scale.set(1.35, 0.7, 1.05);
-  part(stand, new THREE.CylinderGeometry(0.12, 0.13, 0.44, 14), suit, s*0.31, 0.38, 0, 0, s*0.42);
-}
-stand.rotation.y = Math.PI; // face the shore so the camera sees the face
-const torso = new THREE.Group(); torso.position.set(0, 0.56, 0); stand.add(torso);
+stand.rotation.y = Math.PI; // chest toward the shore so the camera sees the face; local -x is the direction of travel
+const UPV = new THREE.Vector3(0, 1, 0), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _k = new THREE.Vector3(), _f = new THREE.Vector3();
+const segGeo = new THREE.CylinderGeometry(0.11, 0.12, 1, 14);
+function seg(m){ const g = new THREE.Mesh(segGeo, m); stand.add(g); return g; }
+function setSeg(mesh, a, b){ _d.subVectors(b, a); const len = _d.length(); mesh.position.addVectors(a, b).multiplyScalar(0.5); mesh.quaternion.setFromUnitVectors(UPV, _d.multiplyScalar(1 / (len || 1))); mesh.scale.set(1, len, 1); }
+const legs = [-1, 1].map(side => {           // side -1 = lead (front) leg, +1 = trail (back) leg
+  const foot = part(stand, SPH(0.15), cream, 0, 0.12, 0); foot.scale.set(1.35, 0.7, 1.05);
+  const knee = part(stand, SPH(0.12), suit, 0, 0.3, 0);
+  return { side, foot, knee, thigh: seg(suit), shin: seg(suit), lift: 0 };
+});
+const torso = new THREE.Group(); torso.position.set(0, 0.56, 0); torso.rotation.order = 'YXZ'; stand.add(torso);
 const body = part(torso, SPH(0.37), suit, 0, 0.32, 0); body.scale.set(1, 1.08, 0.92);
 const belly = part(torso, SPH(0.26), cream, 0, 0.27, -0.17); belly.scale.set(1, 1.1, 0.55);
-const head = new THREE.Group(); head.position.set(0, 0.99, -0.03); torso.add(head);
+const head = new THREE.Group(); head.position.set(0, 0.99, -0.03); head.rotation.order = 'YXZ'; torso.add(head);
 part(head, SPH(0.41), skin, 0, 0, 0);
 part(head, hairDome(0.43), hair, 0, 0, 0, 0.3);
 part(head, SPH(0.1), hair, 0.06, 0.45, -0.07);
 face(head, 0, 0, 0, 0, -1, 0.41);
-function arm(g, s){
-  const pv = new THREE.Group(); pv.position.set(s*0.33, 0.48, 0); g.add(pv);
-  part(pv, new THREE.CylinderGeometry(0.09, 0.1, 0.34, 12), suit, s*0.17, 0, 0, 0, Math.PI/2);
-  part(pv, SPH(0.12), skin, s*0.37, 0, 0);
-  return pv;
+function arm(side){
+  const pv = new THREE.Group(); pv.position.set(side * 0.31, 0.5, 0); torso.add(pv);
+  part(pv, new THREE.CylinderGeometry(0.09, 0.1, 0.34, 12), suit, 0, -0.17, 0);
+  part(pv, SPH(0.12), skin, 0, -0.4, 0);
+  pv.userData.side = side; return pv;
 }
-const armF = arm(torso, 1), armB = arm(torso, -1);
-armF.rotation.z = 0.35; armB.rotation.z = -0.25;
+const armLead = arm(-1), armTrail = arm(1);
+// aim an arm: r = how far it is raised from hanging (0 down, PI/2 level, PI up); w = which way (0 out to the side, + forward, - back)
+function aimArm(pv, r, w){ const sd = pv.userData.side; _d.set(sd * Math.sin(r) * Math.cos(w), -Math.cos(r), -Math.sin(r) * Math.sin(w)).normalize(); pv.quaternion.setFromUnitVectors(_k.set(0, -1, 0), _d); }
+const LEG = 0.31;
+function solveLegs(spread, shift){
+  torso.updateMatrix();
+  for (const L of legs){
+    const footX = shift + L.side * spread / 2;
+    _f.set(footX, 0.12 + L.lift, 0);
+    _a.set(L.side * 0.17, 0.06, 0).applyMatrix4(torso.matrix);           // hip joint
+    _d.subVectors(_a, _f); let dist = Math.min(_d.length(), LEG * 2 - 0.002);
+    const h = Math.sqrt(Math.max(0, LEG * LEG - (dist / 2) ** 2));
+    _d.normalize();
+    _b.set(L.side * 0.25, 0, -1); _b.addScaledVector(_d, -_b.dot(_d)).normalize();   // knees forward, a little outward
+    _k.copy(_f).addScaledVector(_d, dist / 2).addScaledVector(_b, h);
+    L.foot.position.copy(_f); L.knee.position.copy(_k);
+    setSeg(L.shin, _f, _k); setSeg(L.thigh, _k, _a);
+  }
+}
 
 const prone = new THREE.Group(); surfer.add(prone);
 const pb = part(prone, SPH(0.37), suit, -0.08, 0.36, 0); pb.scale.set(1.35, 0.72, 1);
@@ -955,7 +977,7 @@ const T = { cut: 0, cutT: 0, float: false, floatT: 0, hang: 0, grab: false, extr
 let trickQ = null, camMode = 'auto';
 let cheerT = 0, squash = 0, heatStats = { tricks: 0, bestTrick: '', bestTrickPts: 0, barrel: 0 };
 let comboN = 0, comboT = 0;
-const PO = { cr: 0, tw: 0.45, lx: -0.12, lz: 0, fz: 0.45, bz: -0.35, fy: 0, by: 0, hy: 0, hp: 0, hop: 0 };
+const SPR = {}; for (const k of ['c','tw','lx','lz','hx','sp','aLr','aLw','aTr','aTw','hy','hp']) SPR[k] = { x: k === 'sp' ? 0.84 : k === 'tw' ? 0.6 : k === 'c' ? 0.36 : 0, v: 0 };
 function trickToast(name, p){
   cheerT = 0.9;
   if (mode === 'play'){ heatStats.tricks++; if (p > heatStats.bestTrickPts){ heatStats.bestTrickPts = p; heatStats.bestTrick = name.replace(/ \d+\.\d초$/, ''); } }
@@ -1125,54 +1147,62 @@ function frame(now){
       T.hang += dt; ridePts += 240 * dt; hangX = 0.85;
     } else if (T.hang > 0){ const p = Math.round(250 + T.hang * 520); ridePts += p; trickToast(`노즈라이딩 ${T.hang.toFixed(1)}초`, p); T.hang = 0; }
     stand.position.x += (hangX - stand.position.x) * (1 - Math.exp(-dt * 5));
-    // ---- body language: every move has its own pose, blended smoothly ----
-    cheerT = Math.max(0, cheerT - dt); squash *= Math.exp(-dt * 6);
+    // ---- body language: key poses per move, driven through damped springs so motion overshoots and settles ----
+    cheerT = Math.max(0, cheerT - dt);
     T.snapT = Math.max(0, T.snapT - dt); T.turnT = Math.max(0, T.turnT - dt);
-    const pump = S.air || T.float ? 0 : Math.sin(rideT * 7.5) * (0.5 + Math.min(1, Math.abs(S.vf)));
     const cheer = cheerT > 0 ? Math.sin(Math.min(1, cheerT / 0.9) * Math.PI) : 0;
     const Q = {
-      cr: 0.04 + pump * 0.045, tw: 0.45 + S.vf * 0.2 + Math.sin(rideT * 1.6) * 0.12,
-      lx: -0.12 + pump * 0.05, lz: -S.vf * 0.22 + Math.sin(rideT * 3.1) * 0.06,
-      fz: 0.45 + S.vf * 0.35 + Math.sin(rideT * 4) * 0.2, bz: -0.35 + S.vf * 0.3 - Math.sin(rideT * 3.4 + 1) * 0.18,
-      fy: Math.sin(rideT * 3.2) * 0.3, by: -Math.sin(rideT * 2.7 + 0.5) * 0.3, hy: 0, hp: 0.1, hop: 0
+      c: 0.36 + 0.08 * Math.sin(rideT * 4.2) + 0.1 * Math.min(1, Math.abs(S.vf)),
+      tw: 0.6 + 0.1 * Math.sin(rideT * 1.6) - S.vf * 0.15, lx: -0.12, lz: 0.06 + S.vf * 0.08, hx: 0, sp: 0.84,
+      aLr: 0.9 + 0.15 * Math.sin(rideT * 3.1), aLw: 0.25, aTr: 0.75 + 0.15 * Math.sin(rideT * 2.7 + 1), aTw: -0.2,
+      hy: 0.45, hp: 0.08
     };
-    let lookAhead = 1;
-    if (inBarrel > 0){ Q.cr = 0.3; Q.lx = -0.5; Q.fz = 0.3; Q.fy = 0.4; Q.bz = -1.35 + Math.sin(t * 5) * 0.1; Q.by = 0.9; Q.hp = 0; }
+    const set = o => Object.assign(Q, o);
+    const mix = (o, k) => { for (const key in o) Q[key] += (o[key] - Q[key]) * k; };
+    if (inBarrel > 0) set({ c: 0.82, lx: -0.32, lz: 0.05, tw: 0.75, aTr: 0.7, aTw: -1.3 + Math.sin(t * 5) * 0.1, aLr: 0.9, aLw: 1.0, hy: 0.55, hp: -0.05 });
     if (T.turnT > 0){
       const k = Math.sin(Math.PI * (1 - T.turnT / 0.5));
-      if (T.turnKind === 'bottom'){ Q.cr = 0.28 * k + 0.04; Q.lx = 0.35 * k - 0.12; Q.bz = -1.4 * k - 0.2; Q.by = 0.8 * k; Q.fz = 0.9; Q.tw += 0.3 * k; Q.hp = -0.15 * k; }
-      else { Q.cr = -0.04; Q.tw += 0.9 * k; Q.fz = 1.7 * k + 0.4; Q.fy = -0.8 * k; Q.bz = -0.9 * k - 0.3; Q.hp = 0.3 * k; }
+      if (T.turnKind === 'bottom') mix({ c: 0.78, tw: 0.85, lx: 0.28, lz: 0.2, aTr: 0.55, aTw: -1.2, aLr: 1.2, aLw: 0.6, hp: -0.3, hy: 0.35 }, k);
+      else mix({ c: 0.22, tw: 0.15, lx: -0.2, aLr: 1.6, aLw: -0.4, aTr: 1.0, aTw: 0.8, hp: 0.25, hy: -0.1 }, k);
     }
     if (T.cut > 0){
-      const k = clamp(T.cutT / T.cut, 0, 1), s1 = Math.sin(Math.PI * k);
-      Q.cr = 0.22 * s1 + 0.05; Q.tw = 0.45 + 1.5 * s1; Q.lz = 0.45 * Math.sin(2 * Math.PI * k); Q.lx = -0.2 - 0.2 * s1;
-      Q.fz = 0.5 + 1.3 * s1; Q.fy = -1.2 * Math.sin(2 * Math.PI * k); Q.bz = -0.5 - 0.7 * s1; Q.by = 0.6 * s1; lookAhead = 1 - 1.6 * s1;
+      const k = clamp(T.cutT / T.cut, 0, 1), s1 = Math.sin(Math.PI * k), lead = Math.sin(Math.PI * Math.min(1, k * 1.35));
+      set({ c: 0.45 + 0.2 * s1, tw: 0.6 - 1.4 * s1, hy: 0.45 - 1.25 * lead, lz: 0.06 - 0.35 * s1, lx: 0.06 * s1,
+            aLr: 1.0 + 0.35 * s1, aLw: 0.25 - 1.7 * s1, aTr: 0.55, aTw: 0.3 + 0.7 * s1, hp: 0.1 });
     }
     if (T.snapT > 0){
-      const k = 1 - T.snapT / 0.45, w = Math.sin(Math.PI * k);
-      Q.cr = k < 0.35 ? 0.26 : -0.05; Q.tw = 0.45 - 1.3 * w; Q.fz = 2.1 * w + 0.3; Q.fy = 0.8 * w; Q.bz = -0.4 - 1.1 * w; Q.by = -0.6 * w; Q.lx = -0.25 * w; Q.hop = 0.12 * w; Q.hp = 0.25 * w;
+      const k = 1 - T.snapT / 0.45;
+      if (k < 0.3) set({ c: 0.68, tw: 1.1, lx: -0.1, aLr: 0.6, aLw: 1.2, aTr: 0.9, aTw: 0.2, hy: 0.6, hp: 0.1 });
+      else set({ c: 0.14, tw: -0.35, lx: -0.25, lz: 0.25, aLr: 1.75, aLw: -0.8, aTr: 1.45, aTw: 1.3, hy: -0.45, hp: 0.3 });
     }
     if (S.air){
-      Q.cr = T.grab ? 0.38 : 0.16; Q.tw = 0.45; Q.lx = T.grab ? -0.55 : -0.2; Q.lz = 0;
-      Q.fz = T.grab ? -1.3 : 1.5; Q.fy = T.grab ? 0.3 : 0; Q.bz = T.grab ? -0.5 : -1.5; Q.by = 0; Q.hp = 0.35; lookAhead = 0.5;
+      const p = clamp(S.airT / S.airDur, 0, 1);
+      set({ c: p < 0.15 ? 0.1 : p < 0.72 ? 0.7 : 0.35, tw: 0.6, lx: -0.15, lz: 0, aLr: 2.1, aLw: 0.3, aTr: 1.9, aTw: -0.3, hy: 0.2, hp: 0.35 });
+      if (T.grab) set({ c: 0.92, lx: -0.45, aLr: 0.35, aLw: 1.45, aTr: 2.25, aTw: -0.4 });
     }
-    if (T.float){ Q.cr = 0.18; Q.fz = 1.25 + Math.sin(t * 7) * 0.2; Q.bz = -1.25 + Math.sin(t * 7 + 1) * 0.2; Q.fy = 0; Q.by = 0; Q.lx = -0.15; Q.lz = Math.sin(t * 5) * 0.12; Q.hp = 0.3; }
+    if (T.float) set({ c: 0.5, lx: -0.05, lz: Math.sin(t * 5) * 0.12, aLr: 1.55 + Math.sin(t * 7) * 0.2, aLw: 0.1, aTr: 1.55 - Math.sin(t * 7) * 0.2, aTw: -0.1, hp: 0.3, hy: 0.3 });
+    let walking = false;
     if (T.hang > 0){
-      Q.cr = -0.03; Q.tw = 1.35; Q.lx = 0.05; Q.lz = 0; Q.fz = 0.25 + Math.sin(t * 5) * 0.15; Q.bz = -0.25 - Math.sin(t * 5) * 0.15; Q.fy = 0.6; Q.by = -0.6; Q.hp = -0.08; lookAhead = 0.3;
-      if (Math.abs(hangX - stand.position.x) > 0.08) Q.hop = Math.abs(Math.sin(t * 14)) * 0.07;
+      set({ c: 0.08, sp: 0.28, tw: 0.95, lx: 0.1, lz: 0, aLr: 1.2, aLw: -0.6, aTr: 1.2, aTw: -0.6, hp: -0.15, hy: 0.3 });
+      walking = Math.abs(hangX - stand.position.x) > 0.06;
+    } else walking = Math.abs(stand.position.x) > 0.06;
+    if (cheer > 0.05 && !S.air && T.snapT <= 0) mix({ c: 0.1, aLr: 2.75, aLw: 0.2, aTr: 2.75, aTw: 0.2, hp: -0.2 }, Math.min(1, cheer * 1.6));
+    // springs: stiff head (it leads the turn), softer body (it follows)
+    if (squash > 0.01){ SPR.c.v += squash * 9; squash = 0; }
+    for (const key in Q){
+      const sp = SPR[key], kk = key === 'hy' || key === 'hp' ? 320 : key[0] === 'a' ? 210 : 150, dd = 2 * 0.7 * Math.sqrt(kk);
+      for (let n = 0, h = dt / 2; n < 2; n++){ sp.v += (kk * (Q[key] - sp.x) - dd * sp.v) * h; sp.x += sp.v * h; }
     }
-    if (cheer > 0.05 && !S.air && T.snapT <= 0){ Q.fz = 2.3; Q.bz = -2.3; Q.fy = 0; Q.by = 0; Q.hop = Math.max(Q.hop, cheer * 0.2); Q.hp = -0.2; }
-    // eyes on the line ahead (board nose), turned slightly toward the camera so the face stays visible
-    Q.hy = (Math.PI / 2 - Q.tw) * 0.85 * lookAhead;
-    const pk = 1 - Math.exp(-dt * 12);
-    for (const k in Q) PO[k] += (Q[k] - PO[k]) * pk;
-    const sq = squash + PO.cr - cheer * 0.05;
-    stand.scale.set(1 + sq * 0.45, 1 - sq, 1 + sq * 0.45);
-    stand.position.y = -Math.abs(S.vf) * 0.05 + PO.hop;
-    stand.rotation.y = Math.PI + PO.tw + (S.air ? Math.sin(S.airT * 9) * 0.1 : 0);
-    torso.rotation.x = PO.lx; torso.rotation.z = PO.lz;
-    armF.rotation.z = PO.fz; armB.rotation.z = PO.bz; armF.rotation.y = PO.fy; armB.rotation.y = PO.by;
-    head.rotation.y = PO.hy; head.rotation.x = -PO.hp;
+    const SP = k => SPR[k].x;
+    const cr = clamp(SP('c'), -0.05, 1);
+    legs[0].lift = walking ? Math.max(0, Math.sin(t * 13)) * 0.14 : 0;
+    legs[1].lift = walking ? Math.max(0, -Math.sin(t * 13)) * 0.14 : 0;
+    stand.scale.set(1, 1, 1); stand.position.y = 0;
+    torso.position.set(SP('hx'), 0.64 - 0.36 * cr, 0);
+    torso.rotation.set(SP('lx'), SP('tw') + (S.air ? Math.sin(S.airT * 9) * 0.08 : 0), SP('lz'));
+    aimArm(armLead, SP('aLr'), SP('aLw')); aimArm(armTrail, SP('aTr'), SP('aTw'));
+    head.rotation.set(-SP('hp'), SP('hy'), 0);
+    solveLegs(clamp(SP('sp'), 0.2, 1), 0);
 
     // scoring
     ridePts += S.speed * dt * 6;
