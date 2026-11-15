@@ -1025,18 +1025,34 @@ function renderVisits(){
     el.innerHTML = `누적 방문 <b>${visits.toLocaleString('ko-KR')}</b>명`; el.hidden = false;
   });
 }
-async function countVisit(){
-  let seen = false;
-  try { seen = localStorage.getItem('sunset-swell-counted') === '1'; } catch (_) {}
-  const go = async op => {
-    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 7000);
-    try { const r = await fetch(`${COUNTER_URL}/${op}/${COUNTER_NS}/${COUNTER_KEY}`, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); const j = await r.json(); const v = Number(j.value); if (!Number.isFinite(v)) throw new Error('bad'); return v; }
-    finally { clearTimeout(timer); }
-  };
+// the counter is a free outside service: try fetch, then JSONP (no CORS needed), and keep the last number we saw
+function jsonp(url, ms){
+  return new Promise((res, rej) => {
+    const cb = '__ab' + Math.random().toString(36).slice(2), sc = document.createElement('script');
+    const done = () => { clearTimeout(tm); try { delete window[cb]; } catch (_) { window[cb] = undefined; } sc.remove(); };
+    const tm = setTimeout(() => { done(); rej(new Error('timeout')); }, ms);
+    window[cb] = d => { done(); res(d); };
+    sc.onerror = () => { done(); rej(new Error('load')); };
+    sc.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb; document.head.appendChild(sc);
+  });
+}
+async function counterCall(op){
+  const url = `${COUNTER_URL}/${op}/${COUNTER_NS}/${COUNTER_KEY}`, val = j => { const v = Number(j && j.value); if (!Number.isFinite(v)) throw new Error('bad'); return v; };
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 6000);
+  try { const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return val(await r.json()); }
+  catch (_) { return val(await jsonp(url, 6000)); }
+  finally { clearTimeout(tm); }
+}
+async function countVisit(attempt = 0){
+  let seen = false, last = null;
+  try { seen = localStorage.getItem('sunset-swell-counted') === '1'; last = Number(localStorage.getItem('sunset-swell-visits-last')) || null; } catch (_) {}
   try {
-    visits = await go(seen ? 'get' : 'hit');
-    if (!seen){ try { localStorage.setItem('sunset-swell-counted', '1'); } catch (_) {} }
-  } catch (_) { visits = null; }
+    visits = await counterCall(seen ? 'get' : 'hit');
+    try { localStorage.setItem('sunset-swell-visits-last', String(visits)); if (!seen) localStorage.setItem('sunset-swell-counted', '1'); } catch (_) {}
+  } catch (_) {
+    visits = last;                                      // show the last known total rather than nothing
+    if (attempt < 2) setTimeout(() => countVisit(attempt + 1), 15000 * (attempt + 1));
+  }
   renderVisits();
 }
 countVisit();
