@@ -1036,7 +1036,22 @@ function jsonp(url, ms){
     sc.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb; document.head.appendChild(sc);
   });
 }
+// once Firebase is set up, the visitor total lives there (stats/visits.count, +1 per new browser); until then the free counter service
+const FIREBASE = { projectId: '', apiKey: '' };   // filled in once the Firebase project exists
+async function fbVisits(op){
+  const doc = `projects/${FIREBASE.projectId}/databases/(default)/documents/stats/visits`, key = `?key=${FIREBASE.apiKey}`;
+  if (op === 'hit'){
+    const r = await fetch(`https://firestore.googleapis.com/v1/projects/${FIREBASE.projectId}/databases/(default)/documents:commit${key}`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ writes: [{ transform: { document: doc, fieldTransforms: [{ fieldPath: 'count', increment: { integerValue: '1' } }] }, currentDocument: { exists: true } }] }) });
+    if (!r.ok) throw new Error(r.status);
+  }
+  const g = await fetch(`https://firestore.googleapis.com/v1/${doc}${key}`, { cache: 'no-store' });
+  if (!g.ok) throw new Error(g.status);
+  const f = (await g.json()).fields || {}, v = Number(f.count && (f.count.integerValue ?? f.count.doubleValue));
+  if (!Number.isFinite(v)) throw new Error('bad'); return v;
+}
 async function counterCall(op){
+  if (FIREBASE.projectId && FIREBASE.apiKey) return fbVisits(op);
   const url = `${COUNTER_URL}/${op}/${COUNTER_NS}/${COUNTER_KEY}`, val = j => { const v = Number(j && j.value); if (!Number.isFinite(v)) throw new Error('bad'); return v; };
   const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 6000);
   try { const r = await fetch(url, { signal: ctl.signal, cache: 'no-store' }); if (!r.ok) throw new Error(r.status); return val(await r.json()); }
@@ -1271,7 +1286,7 @@ function netStart(i = 0){
     else if (kind === 'r') onRideMsg(id, payload.toString().slice(0, 1500)); });
 }
 /* ---------- hall of fame (Firebase Firestore, REST) ---------- */
-const HALL = { projectId: '', apiKey: '' };   // filled in once the Firebase project exists
+const HALL = FIREBASE;
 let hallTop = null, hallMine = new Set();
 try { hallMine = new Set(JSON.parse(localStorage.getItem('sunset-swell-hall-mine') || '[]')); } catch (_) {}
 const hallOn = () => !!(HALL.projectId && HALL.apiKey);
